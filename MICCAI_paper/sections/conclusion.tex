@@ -1,0 +1,4 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented a few-shot continual learning framework for 3D brain MRI using frozen foundation models and task-specific LoRA adapters. In the continual T1$\to$T2 setting, sequential full fine-tuning suffers severe catastrophic forgetting (T1 Dice 0.80$\to$0.16, BWT$\approx$-0.65), while sequential linear probing achieves strong T1 but fails on T2 (MAE 1.45). Our LoRA approach achieves the best balanced performance: T1 Dice 0.62$\pm$0.07, T2 MAE 0.16$\pm$0.05, with zero forgetting (BWT=0) and $<$0.1\% trainable parameters per task. Encoder+decoder LoRA is necessary for segmentation; encoder-only yields poor Dice (0.19). Future work will include task order ablations and comparison with EWC/LwF.

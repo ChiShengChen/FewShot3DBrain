@@ -1,0 +1,17 @@
+\section{Introduction}
+\label{sec:intro}
+
+Medical imaging AI increasingly relies on foundation models pretrained on large-scale datasets~\cite{fomo2025,baseline}. When deployed in clinical settings, these models must adapt to multiple tasks---e.g., tumor segmentation and brain age estimation---often with limited labeled data and without access to prior task samples due to privacy or storage constraints. In practice, radiology departments may introduce new analysis tasks over time (e.g., adding brain age prediction to an existing tumor workflow) with only a small batch of newly annotated cases. This scenario motivates \emph{few-shot continual learning}: learning new tasks sequentially from few examples while retaining performance on previously learned tasks.
+
+Sequential fine-tuning of shared backbone parameters typically causes \emph{catastrophic forgetting}~\cite{kirkpatrick2017,mccloskey1989catastrophic}: when the model is updated for a new task, performance on prior tasks degrades sharply. Existing continual learning strategies such as EWC~\cite{kirkpatrick2017} and LwF~\cite{li2017lwf} mitigate forgetting by regularizing or distilling, but require careful tuning and may still overwrite critical representations. An alternative is to \emph{freeze} the pretrained backbone and adapt only small task-specific modules. Parameter-efficient fine-tuning methods such as LoRA~\cite{hu2022lora} inject low-rank matrices into selected layers, training a small fraction of parameters while preserving the original weights.
+
+We propose a continual learning framework for 3D brain MRI that combines a frozen FOMO-style pretrained backbone~\cite{fomo2025} with task-specific LoRA adapters. Tasks arrive sequentially; each task receives its own LoRA module and task head. No replay buffer or access to previous-task data is required. Because the backbone and prior adapters remain frozen when training a new task, catastrophic forgetting is eliminated by design: BWT is identically zero.
+
+We evaluate on two downstream tasks using public datasets: tumor segmentation (BraTS 2023 Glioma) and brain age estimation (IXI). We compare against sequential linear probing (frozen backbone, train heads only) and sequential full fine-tuning. The key finding is that \emph{only LoRA maintains balanced performance across both tasks} in the continual setting:
+\begin{itemize}
+\item \textbf{Sequential FT} achieves high T1 Dice (0.80) and T2 MAE (0.004$^*$) during training, but suffers severe forgetting: T1 Dice collapses to 0.16 after T2 (BWT$\approx$-0.65). $^*$T2 MAE likely overfits on few-shot validation.
+\item \textbf{Sequential Linear} achieves strong T1 (Dice 0.79) with mild forgetting (BWT$\approx$-0.01), but \emph{fails on T2} (MAE 1.45).
+\item \textbf{LoRA} attains T1 Dice 0.62$\pm$0.07, T2 MAE 0.16$\pm$0.05, BWT=0, with $<$0.1\% trainable params per task---the only method that maintains reasonable performance on both tasks without forgetting.
+\end{itemize}
+
+Our contributions are: (1) a continual learning formulation using frozen backbones and task-specific LoRA for 3D brain MRI; (2) empirical validation on BraTS and IXI showing LoRA achieves best balanced performance; and (3) ablations on LoRA placement and shot count.

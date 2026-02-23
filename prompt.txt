@@ -1,0 +1,21 @@
+You are a senior medical AI researcher helping plan a MICCAI 2026 paper submission (deadline: Feb 26, 2026). The topic is:
+"Few-Shot Continual Learning for 3D Brain MRI with Frozen Foundation Models"
+Context:
+
+Backbone: FOMO-60K official pretrained weights (self-supervised, 60K+ brain MRI scans, released for MICCAI 2025 FOMO Challenge)
+Downstream tasks (sequential, heterogeneous): Task 1: Infarct detection (classification), Task 2: Meningioma segmentation (3D segmentation), Task 3: Brain age estimation (regression)
+Few-shot setting: 16/32/64 labeled examples per task, using the 20% pre-evaluation subset from FOMO Challenge
+Core method: Freeze pretrained backbone, attach task-specific LoRA adapters (<0.1% trainable parameters)
+Hardware constraint: Single NVIDIA RTX 3090 (24GB)
+Positioning: First systematic study of catastrophic forgetting on brain MRI foundation models; benchmark paper + lightweight solution
+
+Please provide:
+
+Detailed method section outline — problem formulation, LoRA adaptation for 3D architectures, continual learning mechanism (adapter isolation, optional prototype-based task routing), training protocol per task
+Complete experiment plan — baselines (independent FT, sequential FT, linear probing, EWC, LwF), ablation studies (adapter type, shot count, task order, LoRA rank), evaluation metrics (per-task performance, BWT, FWT, average accuracy, GPU memory, training time)
+Day-by-day 14-day implementation schedule — from today to Feb 26, covering codebase setup, data pipeline, baseline runs, proposed method, ablations, writing
+Risk analysis — what could go wrong and fallback plans
+Figure plan — suggest 3-4 key figures for an 8-page paper (e.g., framework diagram, forgetting curves, performance comparison table layout)
+Related work structure — key papers to cite in (a) brain MRI foundation models, (b) parameter-efficient fine-tuning, (c) continual learning in medical imaging
+
+Be specific, actionable, and assume I am coding everything from scratch with access to FOMO-60K pretrained weights and HuggingFace PEFT library.

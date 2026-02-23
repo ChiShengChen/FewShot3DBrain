@@ -1,0 +1,44 @@
+% MICCAI 2026 - Few-Shot Continual Learning for 3D Brain MRI
+% For submission: paste content into official MICCAI2026-Latex-Template.zip
+% Local build: uses article class (llncs requires template)
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx,verbatim}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric}
+\usepackage{url}
+\usepackage{ifthen}
+
+\begin{document}
+
+\title{Few-Shot Continual Learning for 3D Brain MRI with Frozen Foundation Models}
+
+\author{Anonymous Author(s) \\ Anonymous Institution(s) \\ \small (Anonymized for MICCAI 2026 double-blind review)}
+\date{}
+
+\maketitle
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\providecommand{\keywords}[1]{\par\vspace{0.5em}\noindent\textbf{Keywords.} #1\par}
+\keywords{Few-shot learning \and Continual learning \and LoRA \and 3D brain MRI \and Foundation models \and Parameter-efficient fine-tuning.}
+
+\input{sections/introduction}
+\input{sections/method}
+\input{sections/experiments}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\input{sections/appendix}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

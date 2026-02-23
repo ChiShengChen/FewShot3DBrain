@@ -1,0 +1,77 @@
+\section{Method}
+\label{sec:method}
+
+\subsection{Problem Formulation}
+\label{sec:problem}
+
+We consider continual learning with sequential task arrival. Let $f_\theta$ denote a pretrained 3D UNet backbone (frozen) and $\mathcal{T}_1, \mathcal{T}_2, \ldots, \mathcal{T}_K$ a sequence of tasks. For each task $k$, we have access to only $N_k \in \{16, 32, 64\}$ labeled few-shot samples. We assume \emph{no replay}: when training on $\mathcal{T}_k$, we cannot access data from $\mathcal{T}_{<k}$. The goal is to learn task-specific parameters $\phi_k$ (and heads $h_k$) such that performance on all seen tasks remains high after training on $\mathcal{T}_k$.
+
+We evaluate two tasks: (1) tumor segmentation (3D binary mask) and (2) brain age estimation (regression). Each task has modality-specific inputs (BraTS: T2w, T2-FLAIR, T1c; IXI: T1, T2) and a distinct output head $h_k$.
+
+Figure~\ref{fig:framework} illustrates the overall pipeline: a frozen pretrained backbone, task-specific LoRA adapters, and task heads. At inference for task $k$, we use backbone $f_\theta$ + adapter $\phi_k$ + head $h_k$; prior adapters and the backbone remain frozen.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=0.5cm and 0.8cm,
+  box/.style={draw, minimum width=2cm, minimum height=0.5cm, align=center, font=\small},
+  bigbox/.style={draw, minimum width=2.2cm, minimum height=0.7cm, align=center, font=\small},
+  frozen/.style={fill=gray!15, box},
+  trainable/.style={fill=blue!12, box},
+  arrow/.style={-{Stealth[length=2mm]}, thick}
+]
+  \node[box] (input) {3D MRI\\BraTS / IXI};
+  \node[below=0.3cm of input, font=\scriptsize, text width=2.2cm, align=center] {T2/FLAIR/T1c or T1+T2};
+  \node[bigbox, frozen, right=1.2cm of input] (backbone) {Frozen Backbone\\$f_\theta$ (UNet)};
+  \node[below=0.2cm of backbone, font=\scriptsize] {pretrained, fixed};
+  \node[box, trainable, above right=0.6cm and 0.6cm of backbone] (lora1) {LoRA $\phi_1$};
+  \node[box, trainable, below right=0.6cm and 0.6cm of backbone] (lora2) {LoRA $\phi_2$};
+  \node[box, trainable, right=0.8cm of lora1] (head1) {Head $h_1$};
+  \node[box, trainable, right=0.8cm of lora2] (head2) {Head $h_2$};
+  \node[box, right=0.6cm of head1] (out1) {Seg mask};
+  \node[box, right=0.6cm of head2] (out2) {Age (yr)};
+  \draw[arrow] (input) -- (backbone);
+  \draw[arrow] (backbone.east) -- ++(0.3,0) |- (lora1.west);
+  \draw[arrow] (backbone.east) -- ++(0.3,0) |- (lora2.west);
+  \draw[arrow] (lora1) -- (head1);
+  \draw[arrow] (lora2) -- (head2);
+  \draw[arrow] (head1) -- (out1);
+  \draw[arrow] (head2) -- (out2);
+\end{tikzpicture}
+\caption{Framework: frozen pretrained backbone $f_\theta$ with task-specific LoRA adapters $\phi_k$ and heads $h_k$. Gray = frozen; blue = trainable per task. At inference for T1 (resp.\ T2): backbone + $\phi_1$ + $h_1$ (resp.\ $\phi_2$ + $h_2$).}
+\label{fig:framework}
+\end{figure}
+
+\subsection{LoRA for 3D Convolutions}
+\label{sec:lora}
+
+Low-Rank Adaptation (LoRA)~\cite{hu2022lora} injects trainable low-rank matrices into a frozen weight matrix $W \in \mathbb{R}^{d \times k}$:
+\begin{equation}
+W' = W + \Delta W, \quad \Delta W = B \cdot A, \quad A \in \mathbb{R}^{r \times k}, \; B \in \mathbb{R}^{d \times r}
+\end{equation}
+with rank $r \ll \min(d,k)$. Only $A$ and $B$ are trained; $W$ stays frozen. For 3D convolutions in a UNet, we apply LoRA via $1\times1\times1$ convolutions (linear in the channel dimension), which is memory-efficient and compatible with standard Conv3d layers~\cite{peft}.
+
+We use rank $r \in \{4, 8, 16\}$ (default $r=8$), $\alpha=16$, and target both encoder and decoder blocks for segmentation; encoder-only suffices for classification and regression. This yields $<$0.1\% trainable parameters per task relative to the backbone (~50M params).
+
+\subsection{Continual Learning via Adapter Isolation}
+\label{sec:continual}
+
+Each task $k$ receives a \emph{dedicated LoRA adapter} $\phi_k$. When training on $\mathcal{T}_k$, we:
+\begin{enumerate}
+\item Freeze $f_\theta$ and all $\phi_{<k}$.
+\item Add LoRA($\phi_k$) and task head $h_k$.
+\item Train only $\phi_k$ and $h_k$ on $\mathcal{T}_k$'s few-shot samples.
+\item Save $\phi_k$, $h_k$; proceed to $\mathcal{T}_{k+1}$.
+\end{enumerate}
+
+At inference for task $k$: load backbone $f_\theta$ + adapter $\phi_k$ + head $h_k$. No shared adapter across tasks. Because we never update $\phi_{<k}$ or $f_\theta$ when learning $\mathcal{T}_k$, \emph{backward transfer (BWT) is identically zero}: prior task performance cannot degrade.
+
+\subsection{Task Heads and Losses}
+\label{sec:heads}
+
+\begin{itemize}
+\item \textbf{Task 1 (Segmentation):} Full UNet decoder (encoder+decoder LoRA); Dice + BCE loss.
+\item \textbf{Task 2 (Regression):} ClsRegHead with 1 output; MSE loss.
+\end{itemize}
+
+Training uses standard optimizers (Adam) and per-channel Z-score normalization. Patch size is $64\times64\times64$ for continual experiments.

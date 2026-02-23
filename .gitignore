@@ -1,0 +1,74 @@
+# FewShot3DBrain - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+.tox/
+.mypy_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Weights & Checkpoints
+weights/
+**/weights/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+
+# Data (large files)
+data/
+data/preprocessed/
+data/plan_b_raw/
+scripts/data/
+scripts/data/preprocessed/
+scripts/data/plan_b_raw/
+fomo_baseline/data/
+champion_fomo/data/
+*.npy
+*.npz
+*.nii
+*.nii.gz
+
+# Experiment Outputs
+outputs/
+logs/
+runs/
+wandb/
+mlruns/
+
+# LaTeX artifacts (MICCAI_paper)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.toc
+*.synctex.gz
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary
+*.tmp
+*.bak
+.cache/

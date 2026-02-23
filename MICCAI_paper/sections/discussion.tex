@@ -1,0 +1,17 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Strengths}
+\label{sec:strengths}
+
+Our approach offers several advantages for clinical deployment. \textbf{Zero forgetting} eliminates the need for replay buffers or complex regularization; adapter isolation guarantees BWT=0. \textbf{Parameter efficiency} ($<$0.1\% per task) enables fast adaptation and low storage. \textbf{Modularity} allows adding new tasks without retraining prior adapters. The frozen backbone preserves pretrained representations, which is critical when downstream data is scarce. Such properties are desirable when a clinical site incrementally adds analysis capabilities (e.g., brain age estimation) to an existing pipeline with few new annotations and without retaining prior-task data.
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+\textbf{T1 performance gap:} LoRA (0.62 Dice) underperforms Sequential Linear (0.79) and Sequential FT (0.80) on segmentation. This may stem from LoRA capacity or decoder adaptation; ablations show encoder+decoder LoRA is necessary. \textbf{T2 systematic bias:} Wilcoxon test on brain age residuals shows significant systematic underestimation ($p<0.001$), possibly due to few-shot training and IXI demographics. \textbf{Infarct detection excluded:} The FOMO formulation includes infarct detection (ISLES 2022) as a binary classification task, but we did not evaluate it. ISLES contains mostly infarct-positive cases; a balanced classifier requires healthy (negative) controls, which ISLES does not provide. Supplementing with IXI healthy subjects would enable evaluation; we defer this to future work. \textbf{Sequential FT T2 overfitting:} MAE 0.004 suggests possible overfitting on few-shot validation; per-task linear probing achieves MAE 0.063 on full eval. \textbf{Task order:} We evaluated T1$\to$T2 only; ablations on task order remain for future work.
+
+\subsection{Related Work}
+\label{sec:related}
+
+Foundation models for brain MRI~\cite{fomo2025,unetr} and PEFT (LoRA~\cite{hu2022lora}, Adapters~\cite{houlsby2019}) are well-established. Continual learning in medical imaging~\cite{kirkpatrick2017,li2017lwf} typically addresses class-incremental segmentation. Our work combines frozen FOMO-style backbones with LoRA for \emph{task-incremental} few-shot continual learning across heterogeneous outputs (segmentation and regression), which is less explored.

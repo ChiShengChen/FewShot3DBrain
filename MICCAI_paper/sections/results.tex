@@ -1,0 +1,138 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Main Comparison: LoRA Achieves Best Balanced Performance}
+\label{sec:main}
+
+Table~\ref{tab:main} summarizes continual learning results. \textbf{Sequential FT} suffers catastrophic forgetting: T1 Dice drops from 0.80 to 0.16 after T2 (BWT$\approx$-0.65). \textbf{Sequential Linear} achieves strong T1 (0.79) with mild forgetting, but fails on T2 (MAE 1.45). \textbf{LoRA} attains the best balanced performance across both tasks: T1 Dice 0.62, T2 MAE 0.16, with BWT=0. Only LoRA maintains reasonable performance on both tasks in the continual setting. Paired $t$-tests across seeds (n=3): LoRA vs.\ Sequential Linear on T2 MAE is highly significant (LoRA better, $p=0.001$); on T1 Dice, Sequential Linear is higher (bootstrap 95\% CI for difference: [0.08, 0.27], $p=0.09$).
+
+\begin{table}[t]
+\caption{Main continual learning results (mean$\pm$std over seeds 42--44, n\_shot=32). BWT negative = forgetting. $^\dagger$Seq FT T2 MAE likely overfits on few-shot validation.}
+\label{tab:main}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Method & T1 Dice$\uparrow$ & T2 MAE$\downarrow$ & T1 after T2 & BWT \\
+\midrule
+LoRA (enc+dec) & $0.62 \pm 0.07$ & $0.16 \pm 0.05$ & (=T1) & $\mathbf{0.00}$ \\
+Sequential Linear & $0.79 \pm 0.01$ & $1.45 \pm 0.03$ & $0.78 \pm 0.01$ & $-0.01 \pm 0.01$ \\
+Sequential FT & $0.80 \pm 0.02$ & $0.004^\dagger \pm 0.002$ & $0.16 \pm 0.16$ & $-0.65 \pm 0.14$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:extended} extends the comparison with per-task linear probing (separate model per task, no continual; patch=32, epochs=50, differing from continual scripts). Per-task linear achieves best T2 MAE (0.063) but requires one full model per task and does not address continual learning. LoRA offers the best continual learning trade-off: balanced T1/T2 performance with zero forgetting.
+
+Figure~\ref{fig:task1} and~\ref{fig:task2} show representative qualitative results (see Appendix for full six-sample stacks). Common LoRA failure modes---e.g., under-segmentation of tumor boundaries and systematic age underestimation---are documented in the Appendix (Fig.~\ref{fig:app_seg_failure},~\ref{fig:app_age_failure}). On the IXI validation set (n=109, seed 42), a paired Wilcoxon signed-rank test on prediction residuals (predicted minus true age) indicated significant systematic bias ($p<0.001$): the model tends to underestimate brain age, likely due to the few-shot regime and the IXI age distribution (many subjects with default/imputed ages).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{figures/task2_seg_s42_0.png}
+\caption{Task 1 tumor segmentation (BraTS): representative sample. Input (T2-FLAIR), Ground Truth, LoRA prediction, overlay (red=GT, green=pred). Full six-sample figure in Appendix (Fig.~\ref{fig:app_seg_stack}).}
+\label{fig:task1}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{figures/task3_age_s42_0.png}
+\caption{Task 2 brain age regression (IXI): representative sample. Orthogonal MRI views (Axial, Coronal, Sagittal) and predicted vs.\ actual age. Full six-sample figure in Appendix (Fig.~\ref{fig:app_age_stack}).}
+\label{fig:task2}
+\end{figure}
+
+\begin{table}[t]
+\caption{Extended comparison. Per-task: separate model per task (patch=32, epochs=50; not continual).}
+\label{tab:extended}
+\centering
+\begin{tabular}{lcccl}
+\toprule
+Method & T1 Dice$\uparrow$ & T2 MAE$\downarrow$ & Setting \\
+\midrule
+LoRA (enc+dec) & $0.62 \pm 0.07$ & $0.16 \pm 0.05$ & Continual \\
+Sequential Linear & $0.79 \pm 0.01$ & $1.45 \pm 0.03$ & Continual \\
+Sequential FT & $0.80 \pm 0.02$ & $0.004 \pm 0.002$ & Continual (forgets) \\
+Per-task Linear & 0.65 & \textbf{0.063} & Oracle (no continual) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Catastrophic Forgetting in Sequential FT}
+\label{sec:forgetting}
+
+Sequential FT achieves high T1 Dice (0.80) and very low T2 MAE (0.004) immediately after training each task. The latter likely reflects overfitting on few-shot validation. Crucially, T1 Dice after T2 training collapses to 0.16 (mean over seeds), yielding $\Delta \approx 0.64$---a clear demonstration of catastrophic forgetting when the backbone is overwritten for T2.
+
+\subsection{LoRA Ablation: Encoder-only vs Encoder+Decoder}
+\label{sec:lora_ablation}
+
+Table~\ref{tab:lora_ablation} compares LoRA placement. Encoder-only LoRA yields poor T1 Dice (0.19); encoder+decoder yields 0.50. Decoder adaptation is necessary for segmentation. T2 (regression) is similar for both.
+
+\begin{table}[t]
+\caption{LoRA placement ablation. Enc+dec = encoder+decoder.}
+\label{tab:lora_ablation}
+\centering
+\begin{tabular}{lcc}
+\toprule
+LoRA Config & T1 Dice$\uparrow$ & T2 MAE$\downarrow$ \\
+\midrule
+Encoder-only & 0.19 & 0.20 \\
+Encoder+decoder & \textbf{0.50} & 0.20 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Shot Ablation (n\_shot=16 vs 32)}
+\label{sec:shot}
+
+Table~\ref{tab:shot} shows few-shot sensitivity. At n\_shot=16, LoRA attains T1 Dice 0.45$\pm$0.04 and T2 MAE 0.33$\pm$0.01; n\_shot=32 improves both (T1 0.62, T2 MAE 0.16). Fewer shots degrade performance, especially for segmentation.
+
+\begin{table}[t]
+\caption{Shot count ablation (LoRA enc+dec, seeds 42--43 for n\_shot=16).}
+\label{tab:shot}
+\centering
+\begin{tabular}{lcc}
+\toprule
+n\_shot & T1 Dice$\uparrow$ & T2 MAE$\downarrow$ \\
+\midrule
+16 & $0.45 \pm 0.04$ & $0.33 \pm 0.01$ \\
+32 & $0.62 \pm 0.07$ & $0.16 \pm 0.05$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Per-Seed Breakdown (LoRA, n\_shot=32)}
+\label{sec:per_seed}
+
+Table~\ref{tab:per_seed} reports per-seed LoRA results for reproducibility. T1 Dice ranges 0.53--0.70; T2 MAE 0.09--0.20.
+
+\begin{table}[t]
+\caption{Per-seed LoRA results (enc+dec, n\_shot=32).}
+\label{tab:per_seed}
+\centering
+\begin{tabular}{lcc}
+\toprule
+Seed & T1 Dice$\uparrow$ & T2 MAE$\downarrow$ \\
+\midrule
+42 & 0.525 & 0.203 \\
+43 & 0.637 & 0.089 \\
+44 & 0.697 & 0.203 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Resource Usage}
+\label{sec:resource}
+
+Table~\ref{tab:resource} summarizes compute. LoRA adds $<$0.1\% trainable params per task; T1 (segmentation) uses $\sim$1.7\,GB peak GPU.
+
+\begin{table}[t]
+\caption{Resource usage (LoRA, n\_shot=32).}
+\label{tab:resource}
+\centering
+\begin{tabular}{lccc}
+\toprule
+Task & Params (trainable) & GPU peak (MB) & Time (sec) \\
+\midrule
+T1 (segmentation) & 46,872 & 1,670 & $\sim$4k--26k \\
+T2 (regression) & 28,177 & 688 & $\sim$95--780 \\
+\bottomrule
+\end{tabular}
+\end{table}

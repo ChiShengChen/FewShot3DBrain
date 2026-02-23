@@ -1,0 +1,11 @@
+# Few-Shot Continual Learning for 3D Brain MRI
+# Python >= 3.9
+
+# Core (minimal - sufficient for training)
+torch>=2.0.0
+numpy>=1.23.0
+scikit-learn>=1.2.0
+tqdm>=4.65.0
+
+# Full FOMO preprocessing (optional - requires Python 3.10+)
+# pip install -e ./fomo_baseline  # yucca, lightning, etc.
