@@ -4,10 +4,10 @@
 \subsection{Datasets and Tasks}
 \label{sec:data}
 
-We use publicly available datasets prepared via Plan B (FOMO downstream data unavailable):
+We use publicly available datasets prepared via Plan B (FOMO downstream data unavailable). \textbf{Notation:} In this paper, T1 denotes tumor segmentation and T2 denotes brain age regression; these correspond to FOMO Task002 and Task003 respectively.
 \begin{itemize}
-\item \textbf{Task 1 (Tumor Segmentation):} BraTS 2023 Glioma~\cite{brats2023} --- 1251 training cases, 3 channels (T2w, T2-FLAIR, T1c). Binary tumor mask from expert annotations.
-\item \textbf{Task 2 (Brain Age):} IXI dataset~\cite{ixi} --- $\sim$577 subjects with T1 and T2 scans and age labels. Regression target: age in years.
+\item \textbf{T1 (Tumor Segmentation, FOMO Task002):} BraTS 2023 Glioma~\cite{brats2023} --- 1251 training cases, 3 channels (T2w, T2-FLAIR, T1c). Binary tumor mask from expert annotations.
+\item \textbf{T2 (Brain Age, FOMO Task003):} IXI dataset~\cite{ixi} --- $\sim$577 subjects with T1 and T2 scans and age labels. Regression target: age in years. \emph{Note:} Subjects with missing age in IXI metadata are imputed to 50.0\,yr in our preprocessing.
 \end{itemize}
 
 \textbf{Data use declaration.} BraTS 2023 Glioma was obtained from Synapse (syn51156910) under the Data Use Agreement. IXI is publicly available at \url{https://brain-development.org/ixi-dataset/} for research use. Both datasets are widely used in medical imaging; no additional ethics approval was required for our experiments.
@@ -17,7 +17,7 @@ Preprocessing: per-channel Z-score normalization, patch extraction ($64^3$), few
 \subsection{Backbone and Pretraining}
 \label{sec:backbone}
 
-\textbf{Architecture:} \texttt{unet\_b} from FOMO~\cite{fomo2025}. \textbf{Weights:} \texttt{fomo25\_mmunetvae\_pretrained.ckpt}. We load 59/82 keys for full UNet (task 1) and 39/40 encoder keys for encoder-only (task 2).
+\textbf{Architecture:} \texttt{unet\_b} from FOMO~\cite{fomo2025}. \textbf{Weights:} \texttt{fomo25\_mmunetvae\_pretrained.ckpt}. We load 59/82 keys for full UNet (T1) and 39/40 encoder keys for encoder-only (T2).
 
 \subsection{Baselines}
 \label{sec:baselines}
@@ -25,6 +25,9 @@ Preprocessing: per-channel Z-score normalization, patch extraction ($64^3$), few
 \begin{itemize}
 \item \textbf{Sequential Linear:} Frozen backbone, train only task heads/decoder sequentially. One shared model for T1$\to$T2.
 \item \textbf{Sequential FT:} Full fine-tuning of backbone sequentially. Expects catastrophic forgetting.
+\item \textbf{EWC:} Elastic Weight Consolidation---Fisher-based penalty to retain important weights.
+\item \textbf{LwF:} Learning without Forgetting---feature distillation from previous task model.
+\item \textbf{Replay:} Experience replay---store samples from previous tasks, distill on replay during new task.
 \item \textbf{Proposed (LoRA):} Frozen backbone + task-specific LoRA adapters (encoder+decoder for T1).
 \end{itemize}
 
@@ -34,7 +37,7 @@ Preprocessing: per-channel Z-score normalization, patch extraction ($64^3$), few
 \begin{itemize}
 \item \textbf{T1:} Dice Similarity Coefficient (Dice$\uparrow$).
 \item \textbf{T2:} Mean Absolute Error in years (MAE$\downarrow$).
-\item \textbf{BWT (Backward Transfer):} $R_{T,k} - R_{k,k}$ for task $k$ after training up to $T$. Negative = forgetting. For T1$\to$T2: BWT = T1 Dice after T2 minus T1 Dice right after T1.
+\item \textbf{BWT (Backward Transfer):} $R_{T,k} - R_{k,k}$ for task $k$ after training up to $T$. For T1$\to$T2: BWT = T1 Dice after T2 minus T1 Dice right after T1 (negative = forgetting). For T3$\to$T2 (Phase 3): BWT = T2 MAE after T1 minus T2 MAE right after T2 (positive = forgetting).
 \end{itemize}
 
 \subsection{Implementation Details}

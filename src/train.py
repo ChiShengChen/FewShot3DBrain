@@ -106,12 +106,15 @@ def train_task(
     return best_val
 
 
-def evaluate(model: nn.Module, val_loader, task_id: int, task_type: str, device: torch.device) -> Dict[str, float]:
+def evaluate(model: nn.Module, val_loader, task_id: int, task_type: str, device: torch.device, max_channels: Optional[int] = None) -> Dict[str, float]:
+    """Evaluate model. If max_channels is set, slice input to that many channels (for encoder trained on fewer modalities)."""
     model.eval()
     all_preds, all_labels = [], []
     with torch.no_grad():
         for batch in val_loader:
             x = batch["image"].to(device)
+            if max_channels is not None and x.size(1) > max_channels:
+                x = x[:, :max_channels]
             y = batch["label"]
             out = model(x)
             if task_type == "classification":
@@ -205,24 +208,52 @@ def compute_fisher_diagonal(
 
 
 def ewc_penalty(model: nn.Module, fisher: dict, optimal: dict) -> torch.Tensor:
-    """Compute EWC regularization term."""
+    """Compute EWC regularization term. Skips params with mismatched shapes (e.g., after task switch)."""
     loss = torch.tensor(0.0, device=next(model.parameters()).device)
     for n, p in model.named_parameters():
-        if n in fisher and p.requires_grad:
-            fi = fisher[n].to(p.device)
-            opt = optimal[n].to(p.device)
-            loss = loss + (fi * (p - opt).pow(2)).sum()
+        if n not in fisher or not p.requires_grad:
+            continue
+        fi = fisher[n]
+        opt = optimal[n]
+        if fi.shape != p.shape or opt.shape != p.shape:
+            continue  # task switch changed architecture (e.g., 3ch vs 2ch input)
+        fi = fi.to(p.device)
+        opt = opt.to(p.device)
+        loss = loss + (fi * (p - opt).pow(2)).sum()
     return loss
 
 
 # --- LwF (feature distillation) ---
+def _get_encoder_in_channels(model: nn.Module) -> int:
+    """Get expected input channels of encoder (first Conv3d in_conv)."""
+    enc = model.backbone.encoder if hasattr(model.backbone, "encoder") else model.backbone
+    for m in enc.modules():
+        if isinstance(m, nn.Conv3d):
+            return m.weight.shape[1]
+    return 1
+
+
+def _adapt_channels(x: torch.Tensor, target_channels: int) -> torch.Tensor:
+    """Slice or zero-pad x on channel dim to match target_channels."""
+    c = x.size(1)
+    if c == target_channels:
+        return x
+    if c > target_channels:
+        return x[:, :target_channels]
+    pad = torch.zeros(x.size(0), target_channels - c, *x.shape[2:], device=x.device, dtype=x.dtype)
+    return torch.cat([x, pad], dim=1)
+
+
 def get_encoder_features(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
     """Extract bottleneck encoder features (before task head)."""
     backbone = model.backbone
+    enc_mod = backbone.encoder if hasattr(backbone, "encoder") else backbone
+    model_ch = _get_encoder_in_channels(model)
+    x_adapt = _adapt_channels(x, model_ch)
     if hasattr(backbone, "encoder"):
-        enc = backbone.encoder(x)
+        enc = backbone.encoder(x_adapt)
     else:
-        enc = backbone(x)
+        enc = backbone(x_adapt)
     if isinstance(enc, (list, tuple)):
         return enc[-1]
     return enc

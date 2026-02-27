@@ -4,6 +4,7 @@ MICCAI 2026 experiments: run EWC, LwF, Replay baselines + n_shot=64 + task order
 Usage:
   python scripts/run_miccai_experiments.py [--phase 1|2|3|all] [--create_dummy] [--seeds 42 43 44]
 """
+import json
 import os
 import sys
 import argparse
@@ -36,6 +37,23 @@ def _legacy_metrics_path(method: str, seed: int) -> Path:
     if method in ("sequential_linear", "sequential_ft"):
         return base / method / "metrics.json"
     return base / "metrics.json"
+
+
+def _metrics_complete(mp: Path, tasks: list, method: str) -> bool:
+    """Check if metrics.json exists and has all required keys (complete run).
+    LoRA does not compute task2_after_t3; EWC/LwF/Replay/sequential_* do."""
+    if not mp.exists():
+        return False
+    try:
+        with open(mp) as f:
+            m = json.load(f)
+        task_ids = [int(t) for t in tasks]
+        required = [f"task{t}" for t in task_ids]
+        if 2 in task_ids and 3 in task_ids and method != "lora":
+            required.append("task2_after_t3" if task_ids == [2, 3] else "task3_after_t2")
+        return all(k in m for k in required)
+    except Exception:
+        return False
 
 
 def run_cmd(cmd: list, cwd=None):
@@ -78,9 +96,9 @@ def main():
         out_base = "outputs/miccai_experiments/n64"
         tasks = ["2", "3"]
         n_shot = "64"
-    else:  # phase 3
+    else:  # phase 3: T3→T2 order (t32_t3t2 to avoid overwriting old t32)
         methods = ["lora", "sequential_linear", "sequential_ft"]
-        out_base = "outputs/miccai_experiments/t32"
+        out_base = "outputs/miccai_experiments/t32_t3t2"
         tasks = ["3", "2"]
         n_shot = "32"
 
@@ -89,8 +107,9 @@ def main():
             save_dir = f"{out_base}/{method}/seed{seed}"
             mp = metrics_path_for(save_dir, method)
             legacy_mp = _legacy_metrics_path(method, seed) if args.skip_legacy else None
-            if not args.force and args.skip_existing and (mp.exists() or (legacy_mp and legacy_mp.exists())):
-                print(f"\n>>> {method} seed={seed} [skip: exists]")
+            complete = _metrics_complete(mp, tasks, method) or (legacy_mp and _metrics_complete(legacy_mp, tasks, method))
+            if not args.force and args.skip_existing and complete:
+                print(f"\n>>> {method} seed={seed} [skip: complete]")
                 continue
             script, extra = METHODS[method]
             cmd = [sys.executable, script, "--tasks", *tasks, "--n_shot", n_shot, "--seed", str(seed),

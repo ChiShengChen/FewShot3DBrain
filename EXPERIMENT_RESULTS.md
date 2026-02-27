@@ -1,6 +1,6 @@
 # FewShot3DBrain Experiment Results
 
-**Last updated:** 2026-02-13 (shot ablation n_shot=16 added)  
+**Last updated:** 2026-02-25 (MICCAI t32_t3t2 Phase 3 T3→T2 results added)  
 **Hardware:** NVIDIA RTX 3090 (24GB)  
 **Purpose:** MICCAI 2026 continual learning comparison
 
@@ -371,9 +371,58 @@ python run_ablations.py --ablations lora_rank --method lora
 
 *LoRA uses task-specific adapters, so BWT=0. Sequential Linear: mild forgetting after T3. Sequential FT: severe catastrophic forgetting.*
 
-### 4.9 Saved Outputs
+### 4.9 MICCAI Experiments (n32, seeds 42–44)
 
-- **Aggregate:** `outputs/multi_seed/aggregate.json`
+**Script:** `python scripts/run_miccai_experiments.py --phase 1`  
+**Aggregate:** `python scripts/aggregate_miccai_results.py` → `outputs/miccai_experiments/n32/aggregate.json`
+
+| Method | T1 Dice↑ | T2 MAE↓ | T1 after T2 | BWT |
+|--------|---------|---------|-------------|-----|
+| **LoRA** (enc+dec) | 0.60 ± 0.08 | 0.012 ± 0.003 | (=T1) | **0.00** |
+| Sequential Linear | 0.79 ± 0.01 | 1.45 ± 0.03 | 0.78 ± 0.01 | -0.01 ± 0.01 |
+| Sequential FT | 0.80 ± 0.02 | 0.005 ± 0.003 | 0.16 ± 0.19 | -0.65 ± 0.17 |
+| EWC | 0.79 ± 0.02 | 0.001 ± 0.001 | 0.15 ± 0.24 | -0.65 ± 0.23 |
+| LwF | 0.80 ± 0.02 | 0.020 ± 0.009 | 0.25 ± 0.22 | -0.56 ± 0.24 |
+| Replay | 0.79 ± 0.01 | 0.021 ± 0.013 | 0.01 ± 0.01 | -0.78 ± 0.02 |
+
+*LoRA: zero forgetting (BWT=0). EWC: lowest T2 MAE but severe forgetting. LwF/Replay: strong T1, moderate forgetting.*
+
+### 4.10 MICCAI Experiments (n64, seeds 42–44)
+
+**Script:** `python scripts/run_miccai_experiments.py --phase 2`  
+**Aggregate:** `python scripts/aggregate_miccai_results.py n64` → `outputs/miccai_experiments/n64/aggregate.json`
+
+| Method | T1 Dice↑ | T2 MAE↓ | T1 after T2 | BWT |
+|--------|---------|---------|-------------|-----|
+| EWC | 0.84 ± 0.02 | 0.001† ± 0.0003 | 0.07 ± 0.10 | -0.77 ± 0.11 |
+| LwF | 0.82 ± 0.01 | 0.038 ± 0.014 | 0.25 ± 0.41 | -0.58 ± 0.42 |
+
+*Phase 2 runs EWC and LwF only (no Replay). LoRA and sequential methods skipped (legacy complete). EWC T2 MAE likely overfits. LwF T1 after T2 has high variance.*
+
+### 4.11 MICCAI Experiments (t32_t3t2, Phase 3, T3→T2 order, seeds 42–44)
+
+**Script:** `python scripts/run_miccai_experiments.py --phase 3 --force`  
+**Output:** `outputs/miccai_experiments/t32_t3t2/`  
+**Aggregate:** `python scripts/aggregate_miccai_results.py t32_t3t2` → `outputs/miccai_experiments/t32_t3t2/aggregate.json`
+
+Task order: T3 (regression) first, then T2 (segmentation). BWT = T2 MAE after T1 minus T2 MAE after T2 (positive = T3 forgetting).
+
+| Method | T1 Dice↑ | T2 MAE↓ | T2 after T1 | BWT |
+|--------|---------|---------|-------------|-----|
+| LoRA (enc+dec) | 0.50 ± 0.08 | 0.005 ± 0.002 | --- | **0.00** |
+| Sequential Linear | 0.78 ± 0.01 | 0.26 ± 0.003 | 0.36 ± 0.05 | 0.10 ± 0.05 |
+| Sequential FT | 0.81 ± 0.01 | 0.001† ± 0.0003 | 7.17 ± 1.41 | 7.16 ± 1.41 |
+
+*LoRA: zero forgetting. Sequential Linear: mild T3 forgetting (BWT≈0.10). Sequential FT: severe T3 forgetting (T2 MAE 0.001→7.17 after T1 training). Seq FT T2 MAE likely overfits.*
+
+### 4.12 Saved Outputs
+
+- **MICCAI n32 aggregate:** `outputs/miccai_experiments/n32/aggregate.json`
+- **MICCAI n64 aggregate:** `outputs/miccai_experiments/n64/aggregate.json`
+- **MICCAI t32 aggregate:** `outputs/miccai_experiments/t32/aggregate.json` (legacy T2→T3)
+- **MICCAI t32_t3t2 aggregate:** `outputs/miccai_experiments/t32_t3t2/aggregate.json` (T3→T2 order)
+- **MICCAI per-method:** `outputs/miccai_experiments/n32/<method>/seed*/metrics.json`, `outputs/miccai_experiments/n64/<method>/seed*/metrics.json`, `outputs/miccai_experiments/t32_t3t2/<method>/seed*/metrics.json`
+- **Legacy aggregate:** `outputs/multi_seed/aggregate.json`
 - **LoRA:** `outputs/multi_seed/lora/seed*/metrics.json`
 - **Sequential Linear:** `outputs/multi_seed/sequential_linear/seed*/sequential_linear/metrics.json`
 - **Sequential FT:** `outputs/multi_seed/sequential_ft/seed*/sequential_ft/metrics.json`
@@ -381,7 +430,7 @@ python run_ablations.py --ablations lora_rank --method lora
 
 ---
 
-### 4.10 Shot Ablation (n_shot=16, LoRA enc+dec)
+### 4.13 Shot Ablation (n_shot=16, LoRA enc+dec)
 
 **Setting:** LoRA r=8, encoder+decoder, seeds 42–44. Task 2→3.
 

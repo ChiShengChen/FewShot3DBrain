@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    tasks = sorted(set(args.tasks))
+    tasks = list(dict.fromkeys(args.tasks))  # preserve order, no duplicates
     for t in tasks:
         if t not in (1, 2, 3):
             print(f"Error: invalid task {t}. Use 1, 2, or 3.")

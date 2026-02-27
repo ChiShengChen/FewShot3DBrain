@@ -8,6 +8,7 @@ import os
 import sys
 import argparse
 import json
+import numpy as np
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -26,6 +27,70 @@ def _get_encoder_state(model):
     if hasattr(backbone, "encoder"):
         return {k.replace("encoder.", ""): v for k, v in backbone.encoder.state_dict().items()}
     return backbone.state_dict()
+
+
+def _reeval_t3_after_t2(adapters_dir: str, tasks: list, args, patch_size: tuple, device, all_metrics: dict, baseline: str):
+    """
+    Re-evaluate T3 after T2 training (when order is T3→T2).
+    Load encoder from backbone_after_task2 (overwritten by T2) into T3 model → measures forgetting of T3.
+    """
+    _, val_loader = get_few_shot_dataloaders(
+        args.data_dir,
+        task_id=3,
+        n_shot=args.n_shot,
+        patch_size=patch_size,
+        batch_size=2,
+        seed=args.seed,
+    )
+    # Build T3 model with 3ch to match T2 encoder (we pad 2ch input to 3ch)
+    model = TaskModel(task_id=3, input_channels=3, patch_size=patch_size, pretrained_path=None, lora_r=0)
+    model.eval()
+
+    task3_ckpt_path = os.path.join(adapters_dir, "task3", "task3_best.pt")
+    if not os.path.exists(task3_ckpt_path):
+        print("WARNING: task3_best.pt not found, skipping T3 re-eval.")
+        return
+
+    backbone_enc_path = os.path.join(adapters_dir, "backbone_after_task2.pt")
+    if not os.path.exists(backbone_enc_path):
+        print("WARNING: backbone_after_task2.pt not found, skipping T3 re-eval.")
+        return
+
+    ckpt = torch.load(task3_ckpt_path, map_location="cpu")
+    t3_sd = ckpt.get("model_state", ckpt)
+    enc_ckpt = torch.load(backbone_enc_path, map_location="cpu")
+    enc_sd = enc_ckpt.get("encoder_state", enc_ckpt)
+    model_enc_sd = model.backbone.encoder.state_dict()
+    load_enc = {k: v for k, v in enc_sd.items() if k in model_enc_sd and model_enc_sd[k].shape == v.shape}
+    model.backbone.encoder.load_state_dict(load_enc, strict=False)
+    head_sd = {k.replace("head.", ""): v for k, v in t3_sd.items() if k.startswith("head.")}
+    if head_sd:
+        model.head.load_state_dict(head_sd, strict=False)
+
+    model = model.to(device)
+    # Pad 2ch input to 3ch for encoder compatibility
+    all_preds, all_labels = [], []
+    with torch.no_grad():
+        for batch in val_loader:
+            x = batch["image"].to(device)
+            if x.size(1) == 2:
+                x = torch.cat([x, torch.zeros_like(x[:, :1])], dim=1)
+            y = batch["label"]
+            out = model(x)
+            all_preds.append(out.cpu())
+            y = y.float().unsqueeze(1) if y.dim() == 1 else y.float()
+            all_labels.append(y)
+    preds = torch.cat(all_preds).numpy()
+    labels = torch.cat(all_labels).numpy()
+    mae = float((np.abs(preds - labels)).mean())
+    metrics = {"mae": mae}
+    all_metrics["task3_after_t2"] = metrics
+    t3_orig = all_metrics.get("task3", {}).get("mae", float("inf"))
+    delta = mae - float(t3_orig)
+    print(f"\n=== T3 re-eval after T2 (catastrophic forgetting) ===")
+    print(f"T3 MAE right after T3: {t3_orig:.4f}")
+    print(f"T3 MAE after T2 training: {mae:.4f}")
+    print(f"Forgetting Δ = {delta:.4f}")
 
 
 def _reeval_t2_after_t3(adapters_dir: str, tasks: list, args, patch_size: tuple, device, all_metrics: dict, baseline: str):
@@ -117,7 +182,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    tasks = sorted(set(args.tasks))
+    tasks = list(dict.fromkeys(args.tasks))  # preserve order, no duplicates
     for t in tasks:
         if t not in (1, 2, 3):
             print(f"Error: invalid task {t}. Use 1, 2, or 3.")
@@ -184,23 +249,38 @@ def main():
         )
         all_metrics[f"task{task_id}"] = metrics
         print(f"Task {task_id} done: {metrics}")
+        os.makedirs(os.path.join(args.save_dir, args.baseline), exist_ok=True)
+        out_path = os.path.join(args.save_dir, args.baseline, "metrics.json")
+        with open(out_path, "w") as f:
+            json.dump(all_metrics, f, indent=2)
 
         encoder_path = os.path.join(adapters_dir, f"backbone_after_task{task_id}.pt")
         enc_sd = model.backbone.encoder.state_dict() if hasattr(model.backbone, "encoder") else model.backbone.state_dict()
         torch.save({"encoder_state": enc_sd, "task_id": task_id}, encoder_path)
         prev_encoder_path = encoder_path
 
-    # Re-eval T2 after T3 (for BWT: R_3,2) when tasks include 2,3
+    # Re-eval for BWT when tasks include 2,3
     if 2 in tasks and 3 in tasks:
-        _reeval_t2_after_t3(
-            adapters_dir=adapters_dir,
-            tasks=tasks,
-            args=args,
-            patch_size=patch_size,
-            device=device,
-            all_metrics=all_metrics,
-            baseline=args.baseline,
-        )
+        if tasks == [2, 3]:
+            _reeval_t2_after_t3(
+                adapters_dir=adapters_dir,
+                tasks=tasks,
+                args=args,
+                patch_size=patch_size,
+                device=device,
+                all_metrics=all_metrics,
+                baseline=args.baseline,
+            )
+        else:
+            _reeval_t3_after_t2(
+                adapters_dir=adapters_dir,
+                tasks=tasks,
+                args=args,
+                patch_size=patch_size,
+                device=device,
+                all_metrics=all_metrics,
+                baseline=args.baseline,
+            )
 
     os.makedirs(os.path.join(args.save_dir, args.baseline), exist_ok=True)
     out_path = os.path.join(args.save_dir, args.baseline, "metrics.json")

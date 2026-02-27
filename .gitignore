@@ -51,6 +51,7 @@ mlruns/
 
 # LaTeX artifacts (MICCAI_paper)
 *.aux
+*.log
 *.bbl
 *.blg
 *.fdb_latexmk

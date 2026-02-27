@@ -76,7 +76,7 @@ def main():
 
         model = TaskModel(
             task_id=task_id,
-            input_channels=cfg["modalities"],
+            input_channels=next(iter(train_loader))["image"].size(1),
             patch_size=patch_size,
             pretrained_path=args.pretrained_path if task_id == tasks[0] else None,
             model_name="unet_b",
@@ -95,6 +95,9 @@ def main():
         )
         all_metrics[f"task{task_id}"] = metrics
         print(f"Task {task_id} done: {metrics}")
+        os.makedirs(args.save_dir, exist_ok=True)
+        with open(os.path.join(args.save_dir, "metrics.json"), "w") as f:
+            json.dump(all_metrics, f, indent=2)
 
         ewc_fisher, ewc_optimal = compute_fisher_diagonal(
             model, train_loader, task_id, cfg["task_type"], device, n_samples=200,
@@ -109,13 +112,20 @@ def main():
 
     if 2 in tasks and 3 in tasks:
         _, val_loader = get_few_shot_dataloaders(args.data_dir, task_id=2, n_shot=args.n_shot, patch_size=patch_size, batch_size=2, seed=args.seed)
-        cfg = TASK_CONFIGS[2]
-        model = TaskModel(task_id=2, input_channels=cfg["modalities"], patch_size=patch_size, pretrained_path=None, lora_r=0)
-        ckpt = torch.load(os.path.join(adapters_dir, "task2", "task2_best.pt"), map_location="cpu")
-        model.load_state_dict(ckpt.get("model_state", ckpt), strict=False)
         enc = torch.load(os.path.join(adapters_dir, "backbone_after_task3.pt"), map_location="cpu")
-        model.backbone.encoder.load_state_dict(enc.get("encoder_state", enc), strict=False)
-        all_metrics["task2_after_t3"] = evaluate(model, val_loader, 2, "segmentation", device)
+        enc_sd = enc.get("encoder_state", enc)
+        enc_in_ch = next((v.shape[1] for k, v in enc_sd.items() if "in_conv" in k and "weight" in k and v.dim() == 5), None)
+        if enc_in_ch is None:
+            enc_in_ch = next((v.shape[1] for k, v in enc_sd.items() if "weight" in k and v.dim() == 5), 2)
+        model = TaskModel(task_id=2, input_channels=enc_in_ch, patch_size=patch_size, pretrained_path=None, lora_r=0)
+        ckpt = torch.load(os.path.join(adapters_dir, "task2", "task2_best.pt"), map_location="cpu")
+        ckpt_sd = ckpt.get("model_state", ckpt)
+        model_sd = model.state_dict()
+        load_sd = {k: v for k, v in ckpt_sd.items() if k in model_sd and model_sd[k].shape == v.shape}
+        model.load_state_dict(load_sd, strict=False)
+        model.backbone.encoder.load_state_dict(enc_sd, strict=False)
+        model.to(device)
+        all_metrics["task2_after_t3"] = evaluate(model, val_loader, 2, "segmentation", device, max_channels=enc_in_ch)
 
     os.makedirs(args.save_dir, exist_ok=True)
     with open(os.path.join(args.save_dir, "metrics.json"), "w") as f:
