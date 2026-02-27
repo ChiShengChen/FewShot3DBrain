@@ -31,7 +31,7 @@
 |------|---------|
 | `prepare_plan_b_data.py` | Convert BraTS/IXI → preprocessed `.npy` format |
 | `run_miccai_experiments.py` | Phase 1/2/3 experiment orchestration |
-| `aggregate_miccai_results.py` | Aggregate metrics across seeds → `aggregate.json` |
+| `aggregate_miccai_results.py` | Aggregate metrics across seeds |
 | `download_champion_weights.sh` | Download FOMO pretrained weights |
 | `setup_reproduction.sh` | One-shot setup (venv, deps, weights) |
 | `visualize_segmentation.py` | Visualization utilities |

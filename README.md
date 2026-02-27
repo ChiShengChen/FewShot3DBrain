@@ -4,7 +4,9 @@
   <a href="#english">English</a> · <a href="#%E4%B8%AD%E6%96%87">中文</a>
 </p>
 
-Frozen FOMO backbone + task-specific LoRA adapters for sequential few-shot continual learning on tumor segmentation (BraTS) and brain age regression (IXI). MICCAI 2026.
+Frozen FOMO backbone + task-specific LoRA adapters for sequential few-shot continual learning on tumor segmentation (BraTS) and brain age regression (IXI).
+
+![Task 2 segmentation results](MICCAI_paper/figures/task2_seg_s42_stack6.png)
 
 ---
 
@@ -25,7 +27,7 @@ pip install -r requirements.txt
 ./scripts/download_champion_weights.sh
 ```
 
-### Reproduction (MICCAI 2026 Paper)
+### Reproduction
 
 See **[REPRODUCTION.md](REPRODUCTION.md)** for step-by-step instructions.
 
@@ -53,7 +55,7 @@ FewShot3DBrain/
 ├── src/                    # Core: data.py, lora.py, models.py, train.py, backbone
 ├── scripts/
 │   ├── prepare_plan_b_data.py   # Data prep (BraTS, IXI)
-│   ├── run_miccai_experiments.py # MICCAI experiment orchestration
+│   ├── run_miccai_experiments.py # Experiment orchestration
 │   ├── aggregate_miccai_results.py # Result aggregation
 │   └── download_champion_weights.sh # Pretrained weights
 ├── run_continual_lora.py    # Proposed LoRA
@@ -67,19 +69,9 @@ FewShot3DBrain/
 ├── data/                   # preprocessed/ (gitignored)
 ├── weights/                # Pretrained (gitignored)
 ├── outputs/                # Experiment outputs (gitignored)
-├── MICCAI_paper/           # LaTeX paper
+├── MICCAI_paper/           # LaTeX paper (figures, sections)
 ├── EXPERIMENT_RESULTS.md   # Detailed results
 └── REPRODUCTION.md         # Reproduction guide
-```
-
-### Citation
-
-```bibtex
-@inproceedings{fewshot3dbrain2026,
-  title     = {Few-Shot Continual Learning for 3D Brain MRI with LoRA Adapters},
-  booktitle = {MICCAI},
-  year      = {2026},
-}
 ```
 
 ---
@@ -88,7 +80,7 @@ FewShot3DBrain/
 
 ## 中文
 
-凍結 FOMO backbone + 任務專用 LoRA adapters，用於 BraTS 腫瘤分割與 IXI 腦齡估計的序貫少樣本持續學習。MICCAI 2026。
+凍結 FOMO backbone + 任務專用 LoRA adapters，用於 BraTS 腫瘤分割與 IXI 腦齡估計的序貫少樣本持續學習。
 
 ### 安裝
 

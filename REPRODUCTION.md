@@ -1,6 +1,6 @@
-# Reproduction Guide (MICCAI 2026)
+# Reproduction Guide
 
-This document describes how to reproduce the experiments in the paper.
+This document describes how to reproduce the experiments.
 
 ## Environment
 

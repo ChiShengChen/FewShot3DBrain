@@ -1,8 +1,8 @@
 # FewShot3DBrain Experiment Results
 
-**Last updated:** 2026-02-25 (MICCAI t32_t3t2 Phase 3 T3→T2 results added)  
+**Last updated:** 2026-02-25 (t32_t3t2 Phase 3 T3→T2 results added)  
 **Hardware:** NVIDIA RTX 3090 (24GB)  
-**Purpose:** MICCAI 2026 continual learning comparison
+**Purpose:** Continual learning comparison
 
 ---
 
@@ -371,7 +371,7 @@ python run_ablations.py --ablations lora_rank --method lora
 
 *LoRA uses task-specific adapters, so BWT=0. Sequential Linear: mild forgetting after T3. Sequential FT: severe catastrophic forgetting.*
 
-### 4.9 MICCAI Experiments (n32, seeds 42–44)
+### 4.9 Experiments (n32, seeds 42–44)
 
 **Script:** `python scripts/run_miccai_experiments.py --phase 1`  
 **Aggregate:** `python scripts/aggregate_miccai_results.py` → `outputs/miccai_experiments/n32/aggregate.json`
@@ -387,7 +387,7 @@ python run_ablations.py --ablations lora_rank --method lora
 
 *LoRA: zero forgetting (BWT=0). EWC: lowest T2 MAE but severe forgetting. LwF/Replay: strong T1, moderate forgetting.*
 
-### 4.10 MICCAI Experiments (n64, seeds 42–44)
+### 4.10 Experiments (n64, seeds 42–44)
 
 **Script:** `python scripts/run_miccai_experiments.py --phase 2`  
 **Aggregate:** `python scripts/aggregate_miccai_results.py n64` → `outputs/miccai_experiments/n64/aggregate.json`
@@ -399,7 +399,7 @@ python run_ablations.py --ablations lora_rank --method lora
 
 *Phase 2 runs EWC and LwF only (no Replay). LoRA and sequential methods skipped (legacy complete). EWC T2 MAE likely overfits. LwF T1 after T2 has high variance.*
 
-### 4.11 MICCAI Experiments (t32_t3t2, Phase 3, T3→T2 order, seeds 42–44)
+### 4.11 Experiments (t32_t3t2, Phase 3, T3→T2 order, seeds 42–44)
 
 **Script:** `python scripts/run_miccai_experiments.py --phase 3 --force`  
 **Output:** `outputs/miccai_experiments/t32_t3t2/`  
@@ -417,11 +417,11 @@ Task order: T3 (regression) first, then T2 (segmentation). BWT = T2 MAE after T1
 
 ### 4.12 Saved Outputs
 
-- **MICCAI n32 aggregate:** `outputs/miccai_experiments/n32/aggregate.json`
-- **MICCAI n64 aggregate:** `outputs/miccai_experiments/n64/aggregate.json`
-- **MICCAI t32 aggregate:** `outputs/miccai_experiments/t32/aggregate.json` (legacy T2→T3)
-- **MICCAI t32_t3t2 aggregate:** `outputs/miccai_experiments/t32_t3t2/aggregate.json` (T3→T2 order)
-- **MICCAI per-method:** `outputs/miccai_experiments/n32/<method>/seed*/metrics.json`, `outputs/miccai_experiments/n64/<method>/seed*/metrics.json`, `outputs/miccai_experiments/t32_t3t2/<method>/seed*/metrics.json`
+- **n32 aggregate:** `outputs/miccai_experiments/n32/aggregate.json`
+- **n64 aggregate:** `outputs/miccai_experiments/n64/aggregate.json`
+- **t32 aggregate:** `outputs/miccai_experiments/t32/aggregate.json` (legacy T2→T3)
+- **t32_t3t2 aggregate:** `outputs/miccai_experiments/t32_t3t2/aggregate.json` (T3→T2 order)
+- **Per-method:** `outputs/miccai_experiments/n32/<method>/seed*/metrics.json`, etc.
 - **Legacy aggregate:** `outputs/multi_seed/aggregate.json`
 - **LoRA:** `outputs/multi_seed/lora/seed*/metrics.json`
 - **Sequential Linear:** `outputs/multi_seed/sequential_linear/seed*/sequential_linear/metrics.json`
