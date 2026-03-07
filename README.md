@@ -1,5 +1,7 @@
 # Few-Shot Continual Learning for 3D Brain MRI
 
+[![arXiv](https://img.shields.io/badge/arXiv-2602.23533-b31b1b.svg?style=flat-square)](https://arxiv.org/abs/2602.23533)  
+
 <p align="center">
   <a href="#english">English</a> · <a href="#%E4%B8%AD%E6%96%87">中文</a>
 </p>
