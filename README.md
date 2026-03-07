@@ -4,7 +4,7 @@
   <a href="#english">English</a> · <a href="#%E4%B8%AD%E6%96%87">中文</a>
 </p>
 
-Frozen FOMO backbone + task-specific LoRA adapters for sequential few-shot continual learning on tumor segmentation (BraTS) and brain age regression (IXI).
+Frozen FOMO backbone + task-specific LoRA adapters for sequential few-shot continual learning on tumor segmentation (BraTS) and brain age regression (IXI). [arXiv Paper link](https://arxiv.org/abs/2602.23533)
 
 ![Task 2 segmentation results](MICCAI_paper/figures/task2_seg_s42_stack6.png)
 
