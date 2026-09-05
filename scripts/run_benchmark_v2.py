@@ -104,7 +104,11 @@ def run(args):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     results = {"method": args.method, "seed": args.seed, "n_shot": args.n_shot,
-               "tasks": args.tasks, "per_task": {}}
+               "tasks": args.tasks,
+               "eval_protocol": {"overlap": args.overlap, "patch": list(patch_size),
+                                 "eval_batch_size": args.eval_batch_size,
+                                 "max_test_subjects": args.max_test_subjects},
+               "per_task": {}}
     shared_model = None
 
     for pos, task_id in enumerate(args.tasks):

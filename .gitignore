@@ -77,3 +77,4 @@ Thumbs.db
 # audit artefacts
 data/splits_v2/
 outputs/benchmark_v2/
+outputs/benchmark_v2/.submitted.tsv
