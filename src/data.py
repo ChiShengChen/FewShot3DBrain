@@ -33,7 +33,25 @@ TASK_CONFIGS = {
 }
 
 
-def list_case_files(data_dir: str, task_id: int) -> List[str]:
+def _has_usable_label(base_path: str, task_type: str) -> bool:
+    """Scalar-label tasks: drop cases whose label is missing or non-finite.
+
+    IXI ships subjects without an age; keeping them would mean training and scoring
+    against a placeholder value rather than a real measurement.
+    """
+    if task_type == "segmentation":
+        return os.path.exists(base_path + "_seg.npy")
+    txt = base_path + ".txt"
+    if not os.path.exists(txt):
+        return False
+    try:
+        val = np.atleast_1d(np.loadtxt(txt, dtype=np.float64))
+    except Exception:
+        return False
+    return val.size > 0 and bool(np.all(np.isfinite(val)))
+
+
+def list_case_files(data_dir: str, task_id: int, require_usable_label: bool = True) -> List[str]:
     """List all case files (without .npy suffix) in task directory."""
     task_cfg = TASK_CONFIGS[task_id]
     task_name = task_cfg["name"]
@@ -45,7 +63,10 @@ def list_case_files(data_dir: str, task_id: int) -> List[str]:
         if f.endswith(".npy") and not f.endswith(".pkl") and not f.endswith("_seg.npy"):
             case_id = f[:-4]  # strip .npy
             files.append(os.path.join(task_dir, case_id))
-    return sorted(set(files))
+    files = sorted(set(files))
+    if require_usable_label:
+        files = [f for f in files if _has_usable_label(f, task_cfg["task_type"])]
+    return files
 
 
 def few_shot_split(
@@ -83,12 +104,17 @@ class FewShotFOMODataset(Dataset):
         task_type: Literal["classification", "segmentation", "regression"],
         transform=None,
         target_patch_size_for_crop: Optional[Tuple[int, int, int]] = None,
+        deterministic: bool = False,
     ):
         self.files = files
         self.patch_size = patch_size
         self.task_type = task_type
         self.transform = transform
         self.crop_size = target_patch_size_for_crop or patch_size
+        # Validation must not move under the model: a centre crop keeps epoch-to-epoch
+        # comparisons meaningful, whereas a fresh random crop each pass adds noise to
+        # exactly the signal used for model selection.
+        self.deterministic = deterministic
 
     def __len__(self) -> int:
         return len(self.files)
@@ -131,9 +157,12 @@ class FewShotFOMODataset(Dataset):
             if label is not None and label.ndim == 4:
                 label = np.pad(label, ((0, 0), (0, max(0, pd - d)), (0, max(0, ph - h)), (0, max(0, pw - w))), mode="constant", constant_values=0)
             d, h, w = vol.shape[1:]
-        sd = np.random.randint(0, d - pd + 1) if d > pd else 0
-        sh = np.random.randint(0, h - ph + 1) if h > ph else 0
-        sw = np.random.randint(0, w - pw + 1) if w > pw else 0
+        if getattr(self, "deterministic", False):
+            sd, sh, sw = (d - pd) // 2, (h - ph) // 2, (w - pw) // 2
+        else:
+            sd = np.random.randint(0, d - pd + 1) if d > pd else 0
+            sh = np.random.randint(0, h - ph + 1) if h > ph else 0
+            sw = np.random.randint(0, w - pw + 1) if w > pw else 0
         vol = vol[:, sd : sd + pd, sh : sh + ph, sw : sw + pw]
         if label is not None and label.ndim == 4:
             label = label[:, sd : sd + pd, sh : sh + ph, sw : sw + pw]
@@ -147,7 +176,13 @@ class FewShotFOMODataset(Dataset):
         if self.task_type == "segmentation" and isinstance(label, np.ndarray) and label.ndim == 3:
             label = label[np.newaxis, ...]
         
-        vol, label = self._random_crop(vol, label if self.task_type == "segmentation" else None)
+        # NOTE: only segmentation labels are spatial and must be cropped alongside the
+        # volume. Passing the crop result back into `label` unconditionally would discard
+        # the scalar labels loaded above (classification/regression), so keep them intact.
+        if self.task_type == "segmentation":
+            vol, label = self._random_crop(vol, label)
+        else:
+            vol, _ = self._random_crop(vol, None)
         
         if self.task_type == "segmentation":
             if label is None:

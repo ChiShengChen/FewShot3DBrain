@@ -73,3 +73,7 @@ Thumbs.db
 *.tmp
 *.bak
 .cache/
+
+# audit artefacts
+data/splits_v2/
+outputs/benchmark_v2/

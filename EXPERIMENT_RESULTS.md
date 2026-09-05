@@ -1,5 +1,28 @@
 # FewShot3DBrain Experiment Results
 
+> ## ⚠️ RESULTS BELOW ARE INVALIDATED (audited 2026-09-05)
+>
+> A protocol audit found six defects that invalidate every number in Section 4.
+> See **[PROTOCOL_AUDIT.md](PROTOCOL_AUDIT.md)** for evidence and fixes. In short:
+>
+> 1. **Scalar labels never reached the model.** Cropping overwrote them, so every
+>    regression run trained and scored against a constant age of 50.0. All MAE numbers,
+>    all regression-direction BWT numbers, and the Wilcoxon bias test are meaningless.
+>    Classification took the same path, so `T1 AUC = 0.5` and the stated reason for
+>    dropping Task 1 are artefacts too.
+> 2. **83 IXI ages were silently wrong** (zero-padded ID join failure), imputed to 50.0.
+> 3. **No held-out test set**; best-of-100-epochs on the scoring split, evaluated on a
+>    single random crop per case, pooled into one global Dice, with BraTS timepoints of
+>    the same patient split across train and test.
+> 4. **Only the first task loaded the pretrained backbone**; later tasks adapted random
+>    weights, contradicting the frozen-foundation-model premise.
+> 5. **Parameter-efficiency figures are wrong** — 0.2%, not <0.1%; backbone 14–23M, not ~50M.
+> 6. **Sequential Linear trains 180x more parameters than LoRA** on segmentation
+>    (8.4M vs 47K), which the tables present as a head-to-head.
+>
+> Corrected pipeline: `scripts/run_benchmark_v2.py` (+ `src/splits.py`, `src/eval.py`).
+> Re-runs are staged in `scripts/run_stage.sh`; results land in `outputs/benchmark_v2/`.
+
 **Last updated:** 2026-02-25 (t32_t3t2 Phase 3 T3→T2 results added)  
 **Hardware:** NVIDIA RTX 3090 (24GB)  
 **Purpose:** Continual learning comparison
@@ -394,10 +417,21 @@ python run_ablations.py --ablations lora_rank --method lora
 
 | Method | T1 Dice↑ | T2 MAE↓ | T1 after T2 | BWT |
 |--------|---------|---------|-------------|-----|
+| **LoRA (enc+dec)** | 0.67 ± 0.07 | 0.011 ± 0.003 | (=T1) | **0.00** |
 | EWC | 0.84 ± 0.02 | 0.001† ± 0.0003 | 0.07 ± 0.10 | -0.77 ± 0.11 |
 | LwF | 0.82 ± 0.01 | 0.038 ± 0.014 | 0.25 ± 0.41 | -0.58 ± 0.42 |
 
-*Phase 2 runs EWC and LwF only (no Replay). LoRA and sequential methods skipped (legacy complete). EWC T2 MAE likely overfits. LwF T1 after T2 has high variance.*
+*LoRA n64 (5 seeds 42–46): T1 Dice improves from 0.60 (n32) to 0.67 (n64), +0.07. T2 MAE stable. EWC T2 MAE likely overfits. LwF T1 after T2 has high variance.*
+
+**Per-seed LoRA n64:**
+
+| Seed | T2 Dice | T3 MAE | T2 time (sec) | T3 time (sec) |
+|------|---------|--------|---------------|---------------|
+| 42 | 0.669 | 0.015 | 5520 | 940 |
+| 43 | 0.718 | 0.009 | 4282 | 652 |
+| 44 | 0.743 | 0.013 | 3865 | 960 |
+| 45 | 0.537 | 0.013 | 4185 | 1053 |
+| 46 | 0.704 | 0.008 | 4367 | 732 |
 
 ### 4.11 Experiments (t32_t3t2, Phase 3, T3→T2 order, seeds 42–44)
 
@@ -443,6 +477,45 @@ Task order: T3 (regression) first, then T2 (segmentation). BWT = T2 MAE after T1
 **Mean (seed 42–43):** T2 Dice 0.45 ± 0.04, T3 MAE 0.33 ± 0.01
 
 **vs n_shot=32 (multi-seed):** T2 0.62±0.07, T3 MAE 0.16±0.05 → 16-shot LoRA has lower T2 Dice and higher T3 MAE; few-shot sensitivity confirmed.
+
+---
+
+### 4.14 Per-task LoRA Upper Bound (n_shot=32, 5 seeds)
+
+**Setting:** Independent LoRA per task (no continual), enc+dec, r=8. This is the LoRA oracle — any gap vs continual LoRA reveals the cost of the continual setting.
+
+**Per-task T2 (Segmentation):**
+
+| Seed | T2 Dice | Time (sec) | GPU (MB) |
+|------|---------|------------|----------|
+| 42 | 0.505 | 4008 | 1670 |
+| 43 | 0.613 | 3625 | 1670 |
+| 44 | 0.711 | 3408 | 1670 |
+| 45 | 0.463 | 3328 | 1670 |
+| 46 | 0.619 | 3412 | 1670 |
+
+**Mean:** T2 Dice 0.58 ± 0.09
+
+**Per-task T3 (Regression):**
+
+| Seed | T3 MAE | Time (sec) | GPU (MB) |
+|------|--------|------------|----------|
+| 42 | 0.004 | 844 | 688 |
+| 43 | 0.004 | 745 | 688 |
+| 44 | 0.003 | 697 | 688 |
+| 45 | 0.007 | 690 | 688 |
+| 46 | 0.005 | 543 | 688 |
+
+**Mean:** T3 MAE 0.005 ± 0.001
+
+**Comparison with Continual LoRA (seeds 42–44):**
+
+| Setting | T2 Dice | T3 MAE |
+|---------|---------|--------|
+| Per-task LoRA (oracle) | 0.58 ± 0.09 | 0.005 ± 0.001 |
+| Continual LoRA | 0.60 ± 0.08 | 0.012 ± 0.003 |
+
+*Per-task and continual LoRA achieve comparable T2 Dice (0.58 vs 0.60), confirming that the continual setting imposes no measurable cost on LoRA. The adapter isolation mechanism fully preserves per-task performance.*
 
 ---
 

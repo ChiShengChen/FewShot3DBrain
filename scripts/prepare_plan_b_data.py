@@ -242,18 +242,30 @@ def prepare_task2(source_dir: Path, out_dir: Path) -> int:
 
 
 def _load_ixi_demographics(path: Path) -> dict:
+    """Map integer IXI_ID -> age in years. Subjects without a usable age are omitted.
+
+    IXI_ID in the spreadsheet is an integer (2) while filenames zero-pad it (IXI002),
+    so the key must be normalised to int on both sides or the join silently fails.
+    """
     mapping = {}
     try:
         import pandas as pd
         df = pd.read_excel(path, engine="xlrd") if path.suffix.lower() == ".xls" else pd.read_excel(path)
-        id_col = next((c for c in df.columns if "id" in c.lower() or "IXI" in str(c).upper()), df.columns[0])
-        age_col = next((c for c in df.columns if "age" in c.lower()), df.columns[1] if len(df.columns) > 1 else df.columns[0])
+        id_col = next((c for c in df.columns if str(c).strip().upper() == "IXI_ID"), df.columns[0])
+        age_col = next((c for c in df.columns if str(c).strip().upper() == "AGE"), None)
+        if age_col is None:
+            age_col = next((c for c in df.columns if "age" in str(c).lower()), None)
+        if age_col is None:
+            print("Demographics warning: no AGE column found")
+            return mapping
         for _, row in df.iterrows():
-            sid = str(row[id_col]).strip()
             try:
-                mapping[sid] = float(row[age_col])
+                sid = int(float(str(row[id_col]).strip()))
+                age = float(row[age_col])
             except (ValueError, TypeError):
-                mapping[sid] = 50.0
+                continue
+            if np.isfinite(age):
+                mapping[sid] = age
     except Exception as e:
         print(f"Demographics warning: {e}")
     return mapping
@@ -292,6 +304,7 @@ def prepare_task3(source_dir: Path, out_dir: Path, demo_path: Path = None) -> in
         return 0
     demo = _load_ixi_demographics(demo_path) if demo_path and demo_path.exists() else {}
     n = 0
+    n_missing_age = 0
     for c in cases:
         try:
             t1_data, t1_aff = _load_nifti(str(c["t1"]))
@@ -306,16 +319,23 @@ def prepare_task3(source_dir: Path, out_dir: Path, demo_path: Path = None) -> in
                 vol = np.moveaxis(vol4d, -1, 0)
             vol = _zscore_normalize(vol)
             sid = c["id"]
-            age = demo.get(sid) or demo.get(sid.replace("IXI-", "")) or demo.get(sid.split("-")[-1]) or 50.0
-            if not isinstance(age, (int, float)):
-                age = 50.0
+            try:
+                age = demo.get(int(sid.split("-")[-1]), float("nan"))
+            except ValueError:
+                age = float("nan")
+            if not np.isfinite(age):
+                # No usable age: write NaN so the loader excludes this subject rather
+                # than training on a silently imputed placeholder.
+                n_missing_age += 1
             safe_id = re.sub(r"[^\w\-]", "_", c["id"])[:64]
             base = task_dir / f"sample_{safe_id}"
             np.save(str(base) + ".npy", vol.astype(np.float32))
-            np.savetxt(str(base) + ".txt", [float(age)], fmt="%.2f")
+            np.savetxt(str(base) + ".txt", [float(age)], fmt="%.4f")
             n += 1
         except Exception as e:
             print(f"Skip {c['id']}: {e}")
+    if n_missing_age:
+        print(f"Task3: {n_missing_age}/{n} subjects have no usable age (written as NaN, excluded by loader)")
     return n
 
 
