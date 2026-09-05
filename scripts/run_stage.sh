@@ -6,10 +6,16 @@
 #   bash scripts/run_stage.sh C          # ablations / oracles
 #
 # Stages are ordered so the question that decides the paper is answered first.
-# Always launch through scripts/gpu_queue.sh so a running job is never pre-empted.
+#
+# This machine schedules all GPU work through gq. Do not run this script directly --
+# submit it (or, preferably, the individual jobs) with scripts/submit_stage.sh, which
+# declares VRAM/CPU/RAM so the scheduler can place it alongside other users' jobs.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+# `python` on PATH is a CPU-only torch build; the project needs the CUDA env.
+PY="${PY:-/home/meow/anaconda3/envs/pytorch291/bin/python}"
 
 STAGE="${1:-A}"
 N_SHOT="${N_SHOT:-32}"
@@ -25,7 +31,7 @@ run_one() {
     return 0
   fi
   echo "[stage] $(date '+%F %T') START ${method} seed${seed} -> ${log}"
-  python scripts/run_benchmark_v2.py \
+  "$PY" scripts/run_benchmark_v2.py \
     --method "$method" --tasks 2 3 \
     --n_shot "$N_SHOT" --seed "$seed" --epochs "$EPOCHS" \
     >"$log" 2>&1

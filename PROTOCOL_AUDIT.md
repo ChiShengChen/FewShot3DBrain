@@ -216,6 +216,9 @@ with matched modalities, or stay out of the paper with this stated as the real r
 Everything. No number in `EXPERIMENT_RESULTS.md` §4 or in Tables I–VI of the manuscript
 survives unchanged. Staged in `scripts/run_stage.sh`:
 
+GPU work on this machine is scheduled through `gq`; submit with `scripts/submit_stage.sh`
+rather than running the drivers directly.
+
 - **Stage A** — `lora`, `lora_head`, `sequential_linear`, `sequential_ft` at seed 42. This
   is the decisive run: it shows whether LoRA still has a claim once regression is real and
   Dice is measured per-case on held-out subjects, and whether the 66-parameter output head
