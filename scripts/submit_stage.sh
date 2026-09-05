@@ -24,8 +24,12 @@ EPOCHS="${EPOCHS:-100}"
 # (~270 MB more than LoRA's 47K), so it gets one extra GB.
 VRAM="${VRAM:-5G}"
 VRAM_FULL_FT="${VRAM_FULL_FT:-6G}"
-CPUS="${CPUS:-4}"
-RAM="${RAM:-16}"
+# The DataLoader runs with num_workers=0, so there is no parallel loading to justify
+# extra cores; these jobs are GPU-bound. The only sustained CPU work is volume loading
+# and the single-threaded scipy EDT behind HD95. Reserving more than this just blocks
+# other users - CPU, not VRAM, was the binding constraint on the first submission.
+CPUS="${CPUS:-2}"
+RAM="${RAM:-12}"
 PRIORITY="${PRIORITY:-0}"   # default priority: no reason to jump ahead of other users
 DRY="${DRY:-0}"
 PY="${PY:-/home/meow/anaconda3/envs/pytorch291/bin/python}"
@@ -39,7 +43,10 @@ submit_one() {
   local name="fs3d-${method}-s${seed}"
   local vram="$VRAM"
   [[ "$method" == "sequential_ft" ]] && vram="$VRAM_FULL_FT"
+  # Keep torch's thread pools inside the reservation rather than letting them size
+  # themselves from the machine's 22 cores.
   local cmd=(gq submit -g "$vram" -c "$CPUS" -m "$RAM" -p "$PRIORITY" -n "$name" --
+             env "OMP_NUM_THREADS=$CPUS" "MKL_NUM_THREADS=$CPUS"
              "$PY" scripts/run_benchmark_v2.py
              --method "$method" --tasks 2 3
              --n_shot "$N_SHOT" --seed "$seed" --epochs "$EPOCHS")
