@@ -142,14 +142,21 @@ def run(args):
             model.load_state_dict(torch.load(ckpt, map_location="cpu")["model_state"])
         model = model.to(device)
 
-        test_metrics = evaluate_split(model, splits["test"], task_id, device,
-                                      patch=patch_size, overlap=args.overlap,
-                                      batch_size=args.eval_batch_size,
-                                      max_channels=cfg["modalities"],
-                                      return_per_case=True)
-        per_case = test_metrics.pop("per_case", None)
-        if per_case is not None:
-            (out_dir / f"task{task_id}_per_case.json").write_text(json.dumps(per_case, indent=2))
+        # Training is the expensive part and the checkpoint is already on disk, so an
+        # evaluation failure is recorded rather than allowed to discard the run.
+        try:
+            test_metrics = evaluate_split(model, splits["test"], task_id, device,
+                                          patch=patch_size, overlap=args.overlap,
+                                          batch_size=args.eval_batch_size,
+                                          max_channels=cfg["modalities"],
+                                          return_per_case=True)
+            per_case = test_metrics.pop("per_case", None)
+            if per_case is not None:
+                (out_dir / f"task{task_id}_per_case.json").write_text(json.dumps(per_case, indent=2))
+        except Exception as exc:  # noqa: BLE001 - the queue must keep moving
+            import traceback
+            traceback.print_exc()
+            test_metrics = {"error": f"{type(exc).__name__}: {exc}"}
 
         results["per_task"][f"task{task_id}"] = {
             "position": pos,
@@ -162,6 +169,7 @@ def run(args):
             "n_test": len(splits["test"]),
         }
         print(f"task {task_id} TEST: {test_metrics}", flush=True)
+        (out_dir / "results.partial.json").write_text(json.dumps(results, indent=2))
 
         if args.method in ("sequential_linear", "sequential_ft"):
             shared_model = model
@@ -175,17 +183,25 @@ def run(args):
                                               max_test_subjects=args.max_test_subjects)
                 prev_model = build_model(args.method, prev, pcfg, patch_size,
                                          args.pretrained_path, args.lora_r)
-                prev_model.load_state_dict(_carry_backbone(model, prev_model), strict=False)
+                # Restore task `prev` exactly as it was left, then overwrite only the
+                # shared encoder with its current (post-task-`task_id`) state. That is
+                # what forgetting means here: the decoder/head of the old task is intact,
+                # but the representation underneath it has moved.
                 prev_ckpt = out_dir / f"task{prev}" / f"task{prev}_best.pt"
                 if prev_ckpt.exists():
                     prev_model.load_state_dict(
-                        _carry_heads(torch.load(prev_ckpt, map_location="cpu")["model_state"],
-                                     prev_model), strict=False)
+                        torch.load(prev_ckpt, map_location="cpu")["model_state"], strict=False)
+                prev_model.load_state_dict(_carry_encoder(model, prev_model), strict=False)
                 prev_model = prev_model.to(device)
-                after = evaluate_split(prev_model, psplits["test"], prev, device,
-                                       patch=patch_size, overlap=args.overlap,
-                                       batch_size=args.eval_batch_size,
-                                       max_channels=pcfg["modalities"])
+                try:
+                    after = evaluate_split(prev_model, psplits["test"], prev, device,
+                                           patch=patch_size, overlap=args.overlap,
+                                           batch_size=args.eval_batch_size,
+                                           max_channels=pcfg["modalities"])
+                except Exception as exc:  # noqa: BLE001
+                    import traceback
+                    traceback.print_exc()
+                    after = {"error": f"{type(exc).__name__}: {exc}"}
                 results["per_task"][f"task{prev}"][f"test_after_task{task_id}"] = after
                 print(f"task {prev} re-scored after task {task_id}: {after}", flush=True)
 
@@ -205,10 +221,12 @@ def _carry_backbone(src_model, dst_model):
     return out
 
 
-def _carry_heads(src_state, dst_model):
+def _carry_encoder(src_model, dst_model):
+    """Copy only the shared encoder, leaving the old task's decoder/head untouched."""
+    src = src_model.state_dict()
     dst = dst_model.state_dict()
-    return {k: v for k, v in src_state.items()
-            if k in dst and dst[k].shape == v.shape and not k.startswith("backbone")}
+    return {k: src[k] for k, v in dst.items()
+            if k.startswith("backbone.encoder") and k in src and src[k].shape == v.shape}
 
 
 def main():
