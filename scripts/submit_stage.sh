@@ -18,7 +18,12 @@ cd "$(dirname "$0")/.."
 STAGE="${1:-A}"
 N_SHOT="${N_SHOT:-32}"
 EPOCHS="${EPOCHS:-100}"
-VRAM="${VRAM:-8G}"          # measured peak + headroom; see PROTOCOL_AUDIT.md
+# Measured with scripts/probe_vram.py (job #26): peak reserved 4158 MB, hit by the
+# batch-8 sliding-window evaluation on segmentation, not by training. +20% -> 5G.
+# sequential_ft additionally carries gradients and Adam state for all 22.6M parameters
+# (~270 MB more than LoRA's 47K), so it gets one extra GB.
+VRAM="${VRAM:-5G}"
+VRAM_FULL_FT="${VRAM_FULL_FT:-6G}"
 CPUS="${CPUS:-4}"
 RAM="${RAM:-16}"
 PRIORITY="${PRIORITY:-0}"   # default priority: no reason to jump ahead of other users
@@ -32,7 +37,9 @@ submit_one() {
     return 0
   fi
   local name="fs3d-${method}-s${seed}"
-  local cmd=(gq submit -g "$VRAM" -c "$CPUS" -m "$RAM" -p "$PRIORITY" -n "$name" --
+  local vram="$VRAM"
+  [[ "$method" == "sequential_ft" ]] && vram="$VRAM_FULL_FT"
+  local cmd=(gq submit -g "$vram" -c "$CPUS" -m "$RAM" -p "$PRIORITY" -n "$name" --
              "$PY" scripts/run_benchmark_v2.py
              --method "$method" --tasks 2 3
              --n_shot "$N_SHOT" --seed "$seed" --epochs "$EPOCHS")

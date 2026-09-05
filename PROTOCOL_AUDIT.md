@@ -219,6 +219,30 @@ survives unchanged. Staged in `scripts/run_stage.sh`:
 GPU work on this machine is scheduled through `gq`; submit with `scripts/submit_stage.sh`
 rather than running the drivers directly.
 
+**Measured resource use** (`scripts/probe_vram.py`, gq job #26). The declaration comes from
+this, not from a guess:
+
+| Phase | Task | Allocated | Reserved | Wall clock |
+|-------|------|-----------|----------|------------|
+| train step (batch 2) | segmentation | 1670 MB | 1850 MB | -- |
+| sliding-window eval (batch 8) | segmentation | 2359 MB | **4158 MB** | 15.4 s/case |
+| train step (batch 2) | regression | 686 MB | 988 MB | -- |
+| sliding-window eval (batch 8) | regression | 1371 MB | 2526 MB | 0.6 s/case |
+
+The training figure reproduces the project's own recorded `gpu_max_mb` of 1670.48 exactly,
+which is a useful check that the probe measures the right thing. Peak is driven by
+*evaluation*, not training — the old protocol never surfaced this because it never ran
+whole-volume inference. Declared: 5G for the LoRA/linear methods, 6G for `sequential_ft`
+(gradients plus Adam state for all 22.6M parameters add ~270 MB over LoRA's 47K).
+
+**Cost.** Whole-volume scoring is what makes the results comparable to published BraTS
+numbers, and it is not cheap: ~64 min per 250-case segmentation test split. Per run that is
+roughly 65 min training + 64 min test evaluation for the isolated methods, and ~205 min for
+the sequential baselines, which re-score task 1 after task 2 to measure backward transfer.
+Stage A totals ~11.5 GPU-hours. If that proves too expensive on a contended machine, the
+cheapest lever is `--overlap 0.25` (roughly 3x faster, still a standard setting); reducing
+the test set below 250 subjects would widen the confidence intervals instead.
+
 - **Stage A** — `lora`, `lora_head`, `sequential_linear`, `sequential_ft` at seed 42. This
   is the decisive run: it shows whether LoRA still has a claim once regression is real and
   Dice is measured per-case on held-out subjects, and whether the 66-parameter output head
