@@ -212,6 +212,7 @@ def prepare_task2(source_dir: Path, out_dir: Path) -> int:
         print("WARNING: No BraTS cases found.")
         return 0
     n = 0
+    n_unlabelled = 0
     for c in cases:
         try:
             t2_data, t2_aff = _load_nifti(str(c["t2"]))
@@ -224,12 +225,19 @@ def prepare_task2(source_dir: Path, out_dir: Path) -> int:
                 vol4d = np.moveaxis(vol, 0, -1)
                 vol4d = _resample_volume(vol4d, ref_spacing + (1,), TARGET_SPACING + (1,))
                 vol = np.moveaxis(vol4d, -1, 0)
-            if c["seg"] is not None:
-                seg_data = _load_nifti(str(c["seg"]))[0]
-                seg_data = _align_vol_to_ref(seg_data, vol.shape[1:])
-                seg_bin = (seg_data > 0.5).astype(np.float32)[np.newaxis, ...]
-            else:
-                seg_bin = np.zeros((1,) + vol.shape[1:], dtype=np.float32)
+            if c["seg"] is None:
+                # The BraTS challenge validation split ships without segmentations.
+                # Writing an all-zero mask here would be indistinguishable from a genuine
+                # "no tumour" label, and every BraTS-GLI case has a tumour, so skip
+                # instead of fabricating one.
+                n_unlabelled += 1
+                continue
+            seg_data = _load_nifti(str(c["seg"]))[0]
+            seg_data = _align_vol_to_ref(seg_data, vol.shape[1:])
+            seg_bin = (seg_data > 0.5).astype(np.float32)[np.newaxis, ...]
+            if not np.any(seg_bin > 0):
+                n_unlabelled += 1
+                continue
             vol = _zscore_normalize(vol)
             safe_id = re.sub(r"[^\w\-]", "_", c["id"])[:64]
             base = task_dir / f"sample_{safe_id}"
@@ -238,6 +246,9 @@ def prepare_task2(source_dir: Path, out_dir: Path) -> int:
             n += 1
         except Exception as e:
             print(f"Skip {c['id']}: {e}")
+    if n_unlabelled:
+        print(f"Task2: skipped {n_unlabelled} cases with no segmentation "
+              f"(kept {n}); these are the unlabelled challenge split, not tumour-free scans")
     return n
 
 

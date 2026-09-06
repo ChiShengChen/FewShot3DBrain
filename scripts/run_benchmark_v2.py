@@ -238,7 +238,7 @@ def main():
     ap.add_argument("--method", default="lora", choices=METHODS + ["all"])
     ap.add_argument("--tasks", type=int, nargs="+", default=[2, 3])
     ap.add_argument("--data_dir", default=str(ROOT / "data/preprocessed"))
-    ap.add_argument("--split_dir", default=str(ROOT / "data/splits_v2"))
+    ap.add_argument("--split_dir", default=str(ROOT / "data/splits_v3"))
     ap.add_argument("--save_dir", default=str(ROOT / "outputs/benchmark_v2"))
     ap.add_argument("--pretrained_path", default=str(ROOT / "weights/fomo25_mmunetvae_pretrained.ckpt"))
     ap.add_argument("--n_shot", type=int, default=32)

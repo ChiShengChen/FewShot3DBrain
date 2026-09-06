@@ -8,7 +8,7 @@
 
 ## Summary
 
-Six defects were found. Together they invalidate **every regression number in the paper**,
+Eight defects were found. Together they invalidate **every regression number in the paper**,
 the reason Task 1 was dropped, the segmentation numbers' comparability, and the premise
 that a shared frozen pretrained backbone is used across the task sequence.
 
@@ -20,6 +20,9 @@ that a shared frozen pretrained backbone is used across the task sequence.
 | 4 | Only the first task loads pretrained weights | The "shared frozen backbone" premise | **fixed (new driver)** |
 | 5 | Parameter-efficiency figures are wrong | "<0.1% trainable", "~50M backbone" (7 places) | **measured** |
 | 6 | Baseline trains 180x more parameters than LoRA | The "LoRA underperforms" framing | **reported per row** |
+
+| 7 | 219 unlabelled BraTS cases written as empty masks | 17% of every segmentation score | **fixed** |
+| 8 | `np.loadtxt(dtype=int64)` is a hard error on numpy 2.x | Would crash Task 1 on the real env | **fixed** |
 
 Two further data problems are **flagged, not fixed** — they need a decision (see the end).
 

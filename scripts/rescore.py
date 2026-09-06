@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--run_dir", required=True, help="outputs/benchmark_v2/n<shot>/<method>/seed<n>")
     ap.add_argument("--overlap", type=float, required=True)
     ap.add_argument("--data_dir", default=str(ROOT / "data/preprocessed"))
-    ap.add_argument("--split_dir", default=str(ROOT / "data/splits_v2"))
+    ap.add_argument("--split_dir", default=str(ROOT / "data/splits_v3"))
     ap.add_argument("--pretrained_path",
                     default=str(ROOT / "weights/fomo25_mmunetvae_pretrained.ckpt"))
     ap.add_argument("--eval_batch_size", type=int, default=8)

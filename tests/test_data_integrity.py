@@ -118,3 +118,17 @@ def test_task1_volumes_are_not_degenerate():
         pytest.skip("Task 1 not prepared")
     bad = [f for f in files if min(np.load(f + ".npy", mmap_mode="r").shape[1:]) < 32]
     assert not bad, f"{len(bad)}/{len(files)} Task 1 volumes are degenerate, e.g. {bad[:3]}"
+
+
+@needs_data
+def test_unlabelled_segmentation_cases_are_excluded():
+    """BraTS ships a validation split with no segmentations; preprocessing wrote those as
+    all-zero masks, which are indistinguishable from a genuine tumour-free label. Every
+    BraTS-GLI case has a tumour, so an empty mask means unlabelled."""
+    kept = list_case_files(DATA_DIR, 2)
+    raw = list_case_files(DATA_DIR, 2, require_usable_label=False)
+    assert kept, "no usable segmentation cases"
+    empty = [f for f in kept
+             if not np.any(np.asarray(np.load(f + "_seg.npy", mmap_mode="r")) > 0)]
+    assert not empty, f"{len(empty)} unlabelled cases leaked into the pool, e.g. {empty[:3]}"
+    assert len(kept) < len(raw), "expected the unlabelled challenge split to be filtered out"

@@ -2,6 +2,7 @@
 Few-shot data loading for FOMO tasks.
 Works with preprocessed data (numpy .npy + .txt labels).
 """
+import json
 import os
 import numpy as np
 import torch
@@ -34,13 +35,23 @@ TASK_CONFIGS = {
 
 
 def _has_usable_label(base_path: str, task_type: str) -> bool:
-    """Scalar-label tasks: drop cases whose label is missing or non-finite.
+    """Drop cases whose label is missing, non-finite, or a placeholder.
 
-    IXI ships subjects without an age; keeping them would mean training and scoring
-    against a placeholder value rather than a real measurement.
+    IXI ships subjects without an age, and the BraTS challenge ships a validation split
+    with no segmentations at all -- preprocessing wrote those out as all-zero masks, which
+    are indistinguishable from a genuine "no tumour" label. Every BraTS-GLI case has a
+    tumour, so an empty mask means unlabelled: keeping them trains and scores against
+    placeholders rather than measurements.
     """
     if task_type == "segmentation":
-        return os.path.exists(base_path + "_seg.npy")
+        seg_path = base_path + "_seg.npy"
+        if not os.path.exists(seg_path):
+            return False
+        try:
+            seg = np.load(seg_path, mmap_mode="r")
+        except Exception:
+            return False
+        return bool(np.any(np.asarray(seg) > 0))
     txt = base_path + ".txt"
     if not os.path.exists(txt):
         return False
@@ -64,9 +75,30 @@ def list_case_files(data_dir: str, task_id: int, require_usable_label: bool = Tr
             case_id = f[:-4]  # strip .npy
             files.append(os.path.join(task_dir, case_id))
     files = sorted(set(files))
-    if require_usable_label:
-        files = [f for f in files if _has_usable_label(f, task_cfg["task_type"])]
-    return files
+    if not require_usable_label:
+        return files
+
+    # Checking segmentation labels means reading every mask (~35 MB each), which costs
+    # minutes per call. Cache the verdict next to the data and reuse it while the file
+    # inventory is unchanged.
+    cache_path = os.path.join(task_dir, ".usable_cases.json")
+    key = {"n_files": len(files), "task_type": task_cfg["task_type"]}
+    try:
+        with open(cache_path) as fh:
+            cached = json.load(fh)
+        if cached.get("key") == key:
+            usable = set(cached["usable"])
+            return [f for f in files if os.path.basename(f) in usable]
+    except (OSError, ValueError, KeyError):
+        pass
+
+    kept = [f for f in files if _has_usable_label(f, task_cfg["task_type"])]
+    try:
+        with open(cache_path, "w") as fh:
+            json.dump({"key": key, "usable": [os.path.basename(f) for f in kept]}, fh)
+    except OSError:
+        pass  # a read-only data dir is not a reason to fail
+    return kept
 
 
 def few_shot_split(
@@ -130,7 +162,11 @@ class FewShotFOMODataset(Dataset):
         base = path.replace(".npy", "").rstrip(".txt")
         txt_path = base + ".txt"
         if self.task_type == "classification":
-            lbl = np.loadtxt(txt_path, dtype=np.int64) if os.path.exists(txt_path) else np.array(0)
+            # Read as float then cast: label files are written with "%d" in some paths and
+            # a float format in others, and numpy 2.x refuses to parse "0.0" as int64
+            # outright (it was only a deprecation warning under numpy 1.x).
+            lbl = (np.loadtxt(txt_path, dtype=np.float64).astype(np.int64)
+                   if os.path.exists(txt_path) else np.array(0))
         elif self.task_type == "regression":
             lbl = np.loadtxt(txt_path, dtype=np.float32) if os.path.exists(txt_path) else np.array(50.0)
             lbl = np.atleast_1d(lbl)
