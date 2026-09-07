@@ -29,7 +29,11 @@ VRAM_FULL_FT="${VRAM_FULL_FT:-6G}"
 # and the single-threaded scipy EDT behind HD95. Reserving more than this just blocks
 # other users - CPU, not VRAM, was the binding constraint on the first submission.
 CPUS="${CPUS:-2}"
-RAM="${RAM:-12}"
+# Measured on the completed runs (#41 full two-task run, #147 rescore): peak 2G RSS.
+# The model lives on the GPU; host RAM only holds one 106 MB volume plus the eval
+# accumulator. Declaring 12G here made these jobs needlessly hard to place on a box
+# where RAM, not VRAM, is the scarce resource.
+RAM="${RAM:-4}"
 PRIORITY="${PRIORITY:-0}"   # default priority: no reason to jump ahead of other users
 # Sliding-window overlap for test scoring. 0.25 is ~3x cheaper than nnU-Net's 0.5 default
 # and still a standard setting. Every method in a comparison table must use the same
