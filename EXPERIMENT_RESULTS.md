@@ -22,6 +22,11 @@
 >
 > Corrected pipeline: `scripts/run_benchmark_v2.py` (+ `src/splits.py`, `src/eval.py`).
 > Re-runs are staged in `scripts/run_stage.sh`; results land in `outputs/benchmark_v2/`.
+>
+> **Corrected Stage A results (seed 42) are in PROTOCOL_AUDIT.md §5.** Headline:
+> LoRA + 66-param output head reaches Dice 0.794 (linear probing 0.795, p=0.28) at 0.2%
+> trainable parameters with zero forgetting; brain age fails for every method (MAE ≈ 14.6,
+> R² < 0) and must be reported as a negative result.
 
 **Last updated:** 2026-02-25 (t32_t3t2 Phase 3 T3→T2 results added)  
 **Hardware:** NVIDIA RTX 3090 (24GB)  
