@@ -80,7 +80,7 @@ def test_subject_id_groups_brats_timepoints():
 
 
 @needs_data
-@pytest.mark.parametrize("task_id", [2, 3])
+@pytest.mark.parametrize("task_id", [2, 3, 4])
 def test_splits_are_disjoint_at_subject_level(task_id, tmp_path):
     s = load_or_make_splits(DATA_DIR, task_id, 32, seed=42, split_dir=str(tmp_path))
     subj = {k: {subject_id(f) for f in v} for k, v in s.items()}
