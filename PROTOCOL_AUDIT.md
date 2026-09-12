@@ -337,3 +337,19 @@ region; rank 16 is where the extra capacity starts to pay. Brain age is unchange
 ablation table, and rewrite the trade-off sentences in the abstract, contributions, §V-C,
 Discussion and Conclusion to the r=16 numbers. Pending the ISLES pilot, which may
 restructure §V.
+
+## 7. JBHI must-list — status (2026-09-13)
+
+| Item | Status | Where |
+|---|---|---|
+| Rank ablation r ∈ {4, 8, 16} | **done**, 3 seeds — r=16 reported (§6) | `lora_head{,_r4,_r16}/` |
+| Third task that works (ISLES 2022 lesion seg) | data prepared (247 cases); **pilot queued** #820–822, sequence 2→4→3, seed 42 | `*_t243/` |
+| Shot ablation 16 / 32 / 64 | **queued** #823–834: lora_head r16 + Seq. Linear × 3 seeds | `n16/`, `n64/` |
+| Random-init backbone control | **queued** #835–837: lora_head r16, no pretrained weights | `lora_head_r16_randinit/` |
+| EWC / LwF / Replay under the corrected protocol | **ported** to the driver (`--method ewc|lwf|replay`); CPU smoke running; not yet submitted | — |
+| Brain age with whole-brain input | prep script written (`prepare_ixi_wholebrain.py`, Task005_IXI_WB, 96³); not yet run | `Task005_IXI_WB/` |
+| Adapter / BitFit PEFT comparators | not started | — |
+| Extra seeds (45, 46) | not started | — |
+
+Queue depth is the constraint: 18 jobs of mine behind other users' at 8/8 slots. Runs are
+declared at 5G/6G VRAM, 2 CPU, 4G RAM from measurement.
