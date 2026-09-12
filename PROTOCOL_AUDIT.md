@@ -263,47 +263,48 @@ protocol, the current headline claim — "LoRA is the only method that maintains
 performance" — does not survive, and the paper needs the repositioning discussed
 separately (task-ID-free routing, forward transfer, or a benchmark contribution).
 
-## 5. Corrected results — Stage A (clean splits v3, seed 42)
+## 5. Corrected results — three seeds (clean splits v3)
 
 Held-out test set, subject-grouped splits, whole-volume sliding-window inference
-(overlap 0.25), per-case metrics. Unlabelled BraTS cases excluded (`hd95_undefined = 0/275`
-for every method, confirming the fix). Results in `outputs/benchmark_v2/n32/`.
+(overlap 0.25), per-case metrics. Mean ± SD over seeds 42–44; `hd95_undefined = 0` on every
+run. Results in `outputs/benchmark_v2/n32/`.
 
 | Method | Dice↑ | HD95↓ | Age MAE (yr)↓ | Age R² | Dice after T2 | BWT | Trainable |
 |---|---|---|---|---|---|---|---|
-| LoRA (enc+dec) | 0.452 | 136.5 | 15.04 | −0.122 | = T1 | 0.000 | 0.207% |
-| **LoRA + out_conv (`lora_head`)** | **0.794** | **41.5** | 14.58 | −0.038 | = T1 | **0.000** | **0.207%** |
-| Sequential Linear | 0.795 | 43.4 | 14.80 | −0.068 | 0.795 | 0.000 | 37.4% |
-| Sequential FT | 0.813 | 38.4 | 14.66 | −0.035 | 0.561 | −0.253 | 100% |
+| LoRA (enc+dec) | 0.538 ± 0.082 | 135.1 ± 14.0 | 14.51 ± 0.39 | −0.06 ± 0.06 | = T1 | 0.000 | 0.207% |
+| LoRA + out_conv (`lora_head`) | 0.754 ± 0.029 | 48.6 ± 5.0 | 14.40 ± 0.31 | −0.01 ± 0.02 | = T1 | 0.000 | **0.207%** |
+| Sequential Linear | 0.789 ± 0.005 | 41.9 ± 1.3 | 14.64 ± 0.12 | −0.06 ± 0.03 | 0.789 ± 0.005 | 0.000 | 37.4% |
+| Sequential FT | **0.798 ± 0.025** | **40.2 ± 4.9** | 14.52 ± 0.10 | −0.03 ± 0.03 | 0.470 ± 0.084 | **−0.328 ± 0.062** | 100% |
 
-**Paired comparison on the 275 identical test cases** (bootstrap 95% CI, Wilcoxon):
+**Paired per-case Dice, pooled over seeds** (n = 820; bootstrap 95% CI; Wilcoxon):
 
-| Contrast | Mean ΔDice | 95% CI | p |
-|---|---|---|---|
-| lora_head − Sequential Linear | −0.002 | [−0.008, +0.005] | 0.28 |
-| Sequential FT − lora_head | +0.020 | [+0.014, +0.026] | 7e−16 |
-| lora_head − LoRA | **+0.342** | [+0.323, +0.360] | 8e−47 |
+| Contrast | Mean ΔDice | 95% CI | p | per-seed |
+|---|---|---|---|---|
+| lora_head − Sequential Linear | **−0.035** | [−0.040, −0.030] | 9e−50 | −0.002 (p=0.28), −0.061, −0.043 |
+| Sequential FT − lora_head | +0.044 | [+0.040, +0.049] | 8e−82 | |
+| lora_head − LoRA | **+0.217** | [+0.207, +0.228] | 1e−134 | +0.342, +0.213, +0.094 |
 
-### What this establishes
+### What this establishes — and what the seed-42 draft got wrong
 
-1. **The 66-parameter output projection was the whole segmentation gap.** Unfreezing
-   `backbone.decoder.out_conv` lifts Dice by +0.34 (p < 1e−46) at unchanged parameter
-   cost. The manuscript's "LoRA underperforms on segmentation" was a configuration
-   artefact, not a property of LoRA.
-2. **lora_head is statistically indistinguishable from linear probing** (p = 0.28) while
-   training 180× fewer parameters (46,938 vs 8,446,306) and beats it on HD95. Only full
-   fine-tuning is better, by 2 Dice points — and full fine-tuning forgets 25 points on the
-   first task after learning the second.
-3. **Brain age does not work for any method at 32 shots.** Every method — including full
-   fine-tuning of all 22.6M parameters — lands at MAE 14.6–15.0 yr with negative R² and
-   prediction std ≤ 1.2 yr against a true std of 16.5. The constant-predictor baseline
-   is 14.61. This is a task-setup limitation (patch-based input, shot count, or backbone
-   suitability for regression), not a method result, and must be presented as such.
-4. **Zero forgetting is not unique to adapter isolation.** Sequential Linear also has
-   BWT = 0 because its encoder is frozen throughout. The paper's differentiator has to be
-   parameter cost at equal accuracy, not forgetting alone.
+1. **The 66-parameter output projection is most of the LoRA segmentation gap, not all of
+   it.** +0.217 Dice pooled (+0.34 / +0.21 / +0.09 by seed). Plain LoRA's spread
+   (0.452–0.648) is three times wider than lora_head's, so the frozen projection also
+   makes the outcome seed-dependent.
+2. **lora_head does *not* match linear probing.** The seed-42 result (Δ = −0.002, p = 0.28)
+   was the outlier; seeds 43 and 44 give −0.061 and −0.043. Pooled: −0.035 Dice, 4.4%
+   relative, p ≈ 1e−50. Linear probing is also better on HD95 (41.9 vs 48.6) and far more
+   stable (SD 0.005 vs 0.029). The earlier "statistically indistinguishable" and "beats it
+   on HD95" claims are withdrawn from the manuscript.
+3. **The honest claim is a trade-off:** −0.035 Dice for 180× fewer trainable parameters
+   (46.9K vs 8.45M) and ~170× less per-task storage (<200 KB vs ~34 MB). That is a
+   legitimate Pareto point, not a dominance result.
+4. **Full fine-tuning forgets more than seed 42 suggested:** BWT −0.328 ± 0.062
+   (−0.25 / −0.33 / −0.40), which wipes out its +0.044 accuracy edge several times over.
+5. **Zero forgetting is shared with Sequential Linear on every seed**, and Sequential Linear
+   is the more accurate of the two forgetting-free methods.
+6. **Brain age is a negative result for every method on every seed** (MAE 14.4–14.6 vs
+   constant ≈14.6; R² within ±0.06 of zero; prediction SD ≤ 2.7 vs true 16.5). Method
+   ordering changes from seed to seed, as it would for noise.
 
-### Single-seed caveat
-
-These are seed 42 only. Stage B (seeds 43, 44) is required before any of the above can be
-stated with variance; the paired CIs above are over cases, not over training runs.
+**Lesson recorded for the paper:** a single seed would have supported a claim the data does
+not. The manuscript now reports three seeds throughout and says so in Limitations.
