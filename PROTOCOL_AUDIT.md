@@ -308,3 +308,32 @@ run. Results in `outputs/benchmark_v2/n32/`.
 
 **Lesson recorded for the paper:** a single seed would have supported a claim the data does
 not. The manuscript now reports three seeds throughout and says so in Limitations.
+
+## 6. Rank ablation — LoRA + head, r ∈ {4, 8, 16} (three seeds)
+
+Same protocol and splits as §5. `outputs/benchmark_v2/n32/lora_head{,_r4,_r16}/`.
+
+| Config | Dice↑ | HD95↓ | Age MAE | Trainable (T1) | vs. Seq. Linear (paired, n=820) |
+|---|---|---|---|---|---|
+| LoRA + head, r=4 | 0.761 ± 0.023 | 50.1 ± 3.3 | 14.35 | 23,502 (0.104%) | — |
+| LoRA + head, r=8 | 0.754 ± 0.029 | 48.6 ± 5.0 | 14.40 | 46,938 (0.207%) | −0.035 [−0.040, −0.030], p=9e−50 |
+| **LoRA + head, r=16** | **0.777 ± 0.004** | **43.2 ± 0.7** | 14.72 | 93,810 (0.414%) | **−0.012 [−0.015, −0.008], p=3e−10** |
+| Sequential Linear | 0.789 ± 0.005 | 41.9 ± 1.3 | 14.64 | 8,446,306 (37.4%) | reference |
+| Sequential FT | 0.798 ± 0.025 | 40.2 ± 4.9 | 14.52 | 22,582,978 (100%) | +0.009 over SL; **+0.021 over r=16** (p=1e−33) |
+
+Per-seed r=16 − Seq. Linear: −0.013, −0.013, −0.009 — the deficit is small and the same
+on every seed, unlike r=8 where it ranged from −0.002 to −0.061.
+
+**What changes:** the honest headline moves from "−0.035 Dice for 180× fewer parameters"
+to "**−0.012 Dice (1.5% relative) for 90× fewer parameters, with seed stability matching
+linear probing** (SD 0.004 vs 0.005)". r=16 is also more stable than r=8 by a factor of
+seven. The gap to full fine-tuning is 0.021, and full fine-tuning forgets 0.33.
+
+r=4 is not worse than r=8 (+0.007, p=9e−6) at half the parameters — rank 8 sits in a flat
+region; rank 16 is where the extra capacity starts to pay. Brain age is unchanged by rank
+(negative result holds).
+
+**Manuscript action:** make r=16 the reported configuration in Table II, keep r=4/8/16 as an
+ablation table, and rewrite the trade-off sentences in the abstract, contributions, §V-C,
+Discussion and Conclusion to the r=16 numbers. Pending the ISLES pilot, which may
+restructure §V.

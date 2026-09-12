@@ -18,6 +18,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 PRETTY = {
     "lora": "LoRA (enc+dec)",
+    "lora_head": "LoRA + head, r=8",
+    "lora_head_r4": "LoRA + head, r=4",
+    "lora_head_r16": "LoRA + head, r=16",
     "lora_encoder_only": "LoRA (enc only)",
     "sequential_linear": "Sequential Linear",
     "sequential_ft": "Sequential FT",
