@@ -31,6 +31,16 @@ TASK_CONFIGS = {
         "num_classes": 1,
         "modalities": 2,  # T1, T2
     },
+    # Third task for the continual sequence: ISLES 2022 ischemic-stroke lesion
+    # segmentation. Unlike Task 1 (which reused ISLES for classification against IXI
+    # controls acquired with different modalities), this is a single-cohort task with
+    # expert masks, so it is not confounded by acquisition.
+    4: {
+        "name": "Task004_ISLES_SEG",
+        "task_type": "segmentation",
+        "num_classes": 2,
+        "modalities": 3,  # DWI, ADC, FLAIR
+    },
 }
 
 

@@ -100,7 +100,13 @@ def trainable_report(model):
 def run(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     patch_size = (args.patch_size,) * 3
-    out_dir = Path(args.save_dir) / f"n{args.n_shot}" / args.method / f"seed{args.seed}"
+    # Rank is part of the configuration identity for LoRA methods; r=8 is the default and
+    # keeps the un-suffixed directory so existing results stay where they are.
+    run_name = args.method
+    if args.method.startswith("lora") and args.lora_r != 8:
+        run_name = f"{args.method}_r{args.lora_r}"
+    task_tag = "" if list(args.tasks) == [2, 3] else "_t" + "".join(str(t) for t in args.tasks)
+    out_dir = Path(args.save_dir) / f"n{args.n_shot}" / (run_name + task_tag) / f"seed{args.seed}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     results = {"method": args.method, "seed": args.seed, "n_shot": args.n_shot,

@@ -58,21 +58,20 @@ class TaskModel(nn.Module):
         super().__init__()
         self.task_id = task_id
         self.task_type = self._get_task_type(task_id)
-        
-        if task_id == 1:
-            # Classification: encoder + ClsRegHead
+
+        # Dispatch on task *type*, not id, so additional tasks of an existing kind
+        # (e.g. a second segmentation dataset) need only a TASK_CONFIGS entry.
+        if self.task_type == "classification":
             self.backbone = self._build_encoder_only(model_name, input_channels, patch_size)
             self.head = ClsRegHead(in_channels=32 * 16, num_classes=2)  # unet_b starting_filters=32
-        elif task_id == 2:
-            # Segmentation: full UNet with decoder
+        elif self.task_type == "segmentation":
             self.backbone = self._build_full_unet(model_name, input_channels, 2, patch_size)
             self.head = None
-        elif task_id == 3:
-            # Regression: encoder + regressor head
+        elif self.task_type == "regression":
             self.backbone = self._build_encoder_only(model_name, input_channels, patch_size)
             self.head = ClsRegHead(in_channels=32 * 16, num_classes=1)
         else:
-            raise ValueError(f"Unknown task_id: {task_id}")
+            raise ValueError(f"Unknown task type {self.task_type!r} for task_id {task_id}")
 
         if pretrained_path:
             self._load_pretrained(pretrained_path)
@@ -94,7 +93,13 @@ class TaskModel(nn.Module):
                 p.requires_grad = True
 
     def _get_task_type(self, task_id: int) -> str:
-        return {1: "classification", 2: "segmentation", 3: "regression"}[task_id]
+        try:
+            from src.data import TASK_CONFIGS
+        except ImportError:
+            from data import TASK_CONFIGS
+        if task_id not in TASK_CONFIGS:
+            raise ValueError(f"Unknown task_id: {task_id}")
+        return TASK_CONFIGS[task_id]["task_type"]
 
     def _build_encoder_only(self, model_name: str, in_ch: int, patch_size: tuple) -> nn.Module:
         if model_name == "unet_b":
@@ -130,7 +135,7 @@ class TaskModel(nn.Module):
         print(f"Loaded {len(load_sd)}/{len(model_sd)} pretrained keys")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.task_id == 2:
+        if self.task_type == "segmentation":
             return self.backbone(x)  # full UNet for segmentation
         enc = self.backbone(x)  # list [x0..x4] for encoder mode
         return self.head(enc)
