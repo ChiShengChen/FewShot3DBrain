@@ -41,6 +41,15 @@ TASK_CONFIGS = {
         "num_classes": 2,
         "modalities": 3,  # DWI, ADC, FLAIR
     },
+    # Brain age with the whole head resampled to one cube (scripts/prepare_ixi_wholebrain.py),
+    # so a single forward pass sees global anatomy. Run with --patch_size equal to the cube
+    # edge; the crop is then the identity and evaluation is one window.
+    5: {
+        "name": "Task005_IXI_WB",
+        "task_type": "regression",
+        "num_classes": 1,
+        "modalities": 2,  # T1, T2
+    },
 }
 
 

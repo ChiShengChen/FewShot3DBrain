@@ -38,10 +38,16 @@ from src.data import TASK_CONFIGS, FewShotFOMODataset, _seg_collate  # noqa: E40
 from src.eval import evaluate_split  # noqa: E402
 from src.models import TaskModel  # noqa: E402
 from src.splits import load_or_make_splits  # noqa: E402
-from src.train import train_task  # noqa: E402
+from src.replay_buffer import ReplayBuffer  # noqa: E402
+from src.train import compute_fisher_diagonal, train_task, train_task_cl  # noqa: E402
 
 METHODS = ["lora", "lora_head", "lora_encoder_only", "sequential_linear", "sequential_ft",
-           "pertask_lora"]
+           "ewc", "lwf", "replay", "bitfit", "pertask_lora"]
+# Methods that carry one model through the task sequence (and can therefore forget).
+# The regularisation / distillation / replay baselines are full fine-tuning plus a
+# forgetting-mitigation term, so they belong here too.
+SEQUENTIAL = ("sequential_linear", "sequential_ft", "ewc", "lwf", "replay")
+CL_METHODS = ("ewc", "lwf", "replay")
 
 
 def make_loaders(files_train, files_val, task_type, patch_size, batch_size):
@@ -73,7 +79,7 @@ def build_model(method, task_id, cfg, patch_size, pretrained, lora_r):
         model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
                           model_name="unet_b", lora_r=0, lora_decoder=False)
 
-    if method == "sequential_ft":
+    if method in ("sequential_ft",) + CL_METHODS:
         for p in model.parameters():
             p.requires_grad = True
     elif method == "sequential_linear":
@@ -88,6 +94,13 @@ def build_model(method, task_id, cfg, patch_size, pretrained, lora_r):
         for n, p in model.named_parameters():
             if "out_conv" in n:
                 p.requires_grad = True
+    elif method == "bitfit":
+        # PEFT comparator at a similar budget to LoRA: bias terms only (plus the task
+        # head / output projection, as every PEFT recipe trains the new head). Built with
+        # lora_r=0, so nothing else is trainable. Task-isolated like LoRA: a fresh copy
+        # of the backbone per task, so BWT is zero by construction.
+        for n, p in model.named_parameters():
+            p.requires_grad = n.endswith(".bias") or "out_conv" in n or n.startswith("head")
     return model
 
 
@@ -106,7 +119,10 @@ def run(args):
     if args.method.startswith("lora") and args.lora_r != 8:
         run_name = f"{args.method}_r{args.lora_r}"
     task_tag = "" if list(args.tasks) == [2, 3] else "_t" + "".join(str(t) for t in args.tasks)
-    out_dir = Path(args.save_dir) / f"n{args.n_shot}" / (run_name + task_tag) / f"seed{args.seed}"
+    # Free-form tag for controls that change something the name cannot express (e.g. a
+    # randomly initialised backbone), so they never overwrite the main configuration.
+    extra_tag = f"_{args.tag}" if args.tag else ""
+    out_dir = Path(args.save_dir) / f"n{args.n_shot}" / (run_name + task_tag + extra_tag) / f"seed{args.seed}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     results = {"method": args.method, "seed": args.seed, "n_shot": args.n_shot,
@@ -116,6 +132,14 @@ def run(args):
                                  "max_test_subjects": args.max_test_subjects},
                "per_task": {}}
     shared_model = None
+    # State the forgetting-mitigation baselines carry between tasks.
+    cl_state = {
+        "fisher": None, "optimal": None,          # EWC: diagonal Fisher of the previous task
+        "old_model": None,                        # LwF / replay: frozen copy of the previous model
+        "buffer": ReplayBuffer(capacity=args.replay_capacity, seed=args.seed)
+                  if args.method == "replay" else None,
+        "seen": [],                               # task ids already learned (replay sources)
+    }
 
     for pos, task_id in enumerate(args.tasks):
         cfg = TASK_CONFIGS[task_id]
@@ -132,7 +156,7 @@ def run(args):
         # sequential_* carry the backbone forward through the sequence (that is what makes
         # them forget); the isolated methods rebuild from the pretrained checkpoint.
         model = build_model(args.method, task_id, cfg, patch_size, args.pretrained_path, args.lora_r)
-        if args.method in ("sequential_linear", "sequential_ft") and shared_model is not None:
+        if args.method in SEQUENTIAL and shared_model is not None:
             model.load_state_dict(_carry_backbone(shared_model, model), strict=False)
 
         params = trainable_report(model)
@@ -140,10 +164,22 @@ def run(args):
               f"({params['trainable_pct']:.3f}% of {params['total']:,})", flush=True)
 
         t0 = time.perf_counter()
-        val_metrics = train_task(model, train_loader, val_loader, task_id=task_id,
-                                 task_type=cfg["task_type"], device=device,
-                                 epochs=args.epochs, lr=args.lr,
-                                 save_dir=str(out_dir / f"task{task_id}"))
+        common = dict(task_id=task_id, task_type=cfg["task_type"], device=device,
+                      epochs=args.epochs, lr=args.lr, save_dir=str(out_dir / f"task{task_id}"))
+        if args.method in CL_METHODS:
+            val_metrics = train_task_cl(
+                model, train_loader, val_loader, **common,
+                ewc_fisher=cl_state["fisher"] if args.method == "ewc" else None,
+                ewc_optimal=cl_state["optimal"] if args.method == "ewc" else None,
+                lambda_ewc=args.lambda_ewc,
+                old_model=cl_state["old_model"] if args.method in ("lwf", "replay") else None,
+                distill_weight=args.distill_weight,
+                replay_buffer=cl_state["buffer"],
+                replay_task_ids=list(cl_state["seen"]) if args.method == "replay" else None,
+                replay_weight=args.distill_weight,
+            )
+        else:
+            val_metrics = train_task(model, train_loader, val_loader, **common)
         train_sec = time.perf_counter() - t0
 
         # Restore the epoch val picked, then score the untouched test split.
@@ -181,11 +217,25 @@ def run(args):
         print(f"task {task_id} TEST: {test_metrics}", flush=True)
         (out_dir / "results.partial.json").write_text(json.dumps(results, indent=2))
 
-        if args.method in ("sequential_linear", "sequential_ft"):
+        if args.method in SEQUENTIAL:
             shared_model = model
 
+        # Capture what the mitigation baselines need from this task before moving on.
+        # Done on the checkpoint that was kept (best epoch), which is what `model` now holds.
+        if args.method == "ewc":
+            cl_state["fisher"], cl_state["optimal"] = compute_fisher_diagonal(
+                model, train_loader, task_id, cfg["task_type"], device)
+        if args.method in ("lwf", "replay"):
+            import copy
+            cl_state["old_model"] = copy.deepcopy(model).eval()
+            for p in cl_state["old_model"].parameters():
+                p.requires_grad = False
+        if args.method == "replay":
+            cl_state["buffer"].add_from_loader(task_id, train_loader, max_samples=args.replay_capacity)
+            cl_state["seen"].append(task_id)
+
         # Backward transfer: re-score every earlier task with the model as it now stands.
-        if args.method in ("sequential_linear", "sequential_ft") and pos > 0:
+        if args.method in SEQUENTIAL and pos > 0:
             for prev in args.tasks[:pos]:
                 pcfg = TASK_CONFIGS[prev]
                 psplits = load_or_make_splits(args.data_dir, prev, args.n_shot, seed=args.seed,
@@ -257,6 +307,12 @@ def main():
     ap.add_argument("--eval_batch_size", type=int, default=8)
     ap.add_argument("--overlap", type=float, default=0.5)
     ap.add_argument("--max_test_subjects", type=int, default=250)
+    ap.add_argument("--tag", default="", help="suffix for the run directory (controls/ablations)")
+    # Forgetting-mitigation baselines (defaults follow the original run_continual_*.py).
+    ap.add_argument("--lambda_ewc", type=float, default=1000.0)
+    ap.add_argument("--distill_weight", type=float, default=0.5,
+                    help="LwF feature-distillation weight; also used as the replay weight")
+    ap.add_argument("--replay_capacity", type=int, default=100)
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
