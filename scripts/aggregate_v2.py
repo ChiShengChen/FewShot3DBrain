@@ -33,7 +33,10 @@ def collect(root, n_shot):
     for f in sorted(glob.glob(os.path.join(root, f"n{n_shot}", "*", "seed*", "results.json"))):
         with open(f) as fh:
             r = json.load(fh)
-        runs[r["method"]].append(r)
+        # The directory name is the configuration identity: it carries the LoRA rank and
+        # the task sequence, which results.json's "method" field does not.
+        key = os.path.basename(os.path.dirname(os.path.dirname(f)))
+        runs[key].append(r)
     return runs
 
 
@@ -55,6 +58,7 @@ def fmt(stat, digits=3):
 def summarise(runs):
     rows = []
     for method, rs in runs.items():
+        base = method.split("_t")[0] if "_t" in method and method.split("_t")[-1].isdigit() else method
         seg = [r["per_task"].get("task2", {}) for r in rs]
         reg = [r["per_task"].get("task3", {}) for r in rs]
 
@@ -64,7 +68,12 @@ def summarise(runs):
         r2 = ms([s.get("test", {}).get("r2") for s in reg])
         slope = ms([s.get("test", {}).get("calibration_slope") for s in reg])
 
-        after = [s.get("test_after_task3", {}).get("dice") for s in seg]
+        # Backward transfer on task 2 is measured after the *last* task in the sequence;
+        # with a third task in between that key is test_after_task3 either way, but a
+        # two-task run and a three-task run must not be pooled.
+        seq = tuple(rs[0].get("tasks", [2, 3]))
+        last = seq[-1]
+        after = [s.get(f"test_after_task{last}", {}).get("dice") for s in seg]
         after_stat = ms(after)
         if after_stat is None:                       # adapter isolation: nothing to re-score
             bwt_stat, after_txt = (0.0, 0.0, len(rs)), "= T1 (isolated)"
@@ -73,13 +82,26 @@ def summarise(runs):
                            for a, s in zip(after, seg) if a is not None])
             after_txt = fmt(after_stat)
 
+        # Optional third task (ISLES lesion segmentation), reported when present.
+        isl = [r["per_task"].get("task4", {}) for r in rs]
+        isl_dice = ms([s.get("test", {}).get("dice") for s in isl])
+        isl_hd = ms([s.get("test", {}).get("hd95") for s in isl])
+        isl_after = ms([s.get(f"test_after_task{last}", {}).get("dice") for s in isl]) if last != 4 else None
+        isl_bwt = None
+        if isl_after is not None:
+            isl_bwt = ms([s.get(f"test_after_task{last}", {}).get("dice", np.nan) - s.get("test", {}).get("dice", np.nan)
+                          for s in isl if s.get(f"test_after_task{last}")])
+        elif isl_dice is not None:
+            isl_bwt = (0.0, 0.0, len(rs))
+
         params = [s.get("params", {}).get("trainable_pct") for s in seg if s.get("params")]
         rows.append({
-            "method": PRETTY.get(method, method),
-            "key": method,
+            "method": PRETTY.get(base, base) + ("" if base == method else f" [{'->'.join(str(t) for t in seq)}]"),
+            "key": base,
             "n_seeds": len(rs),
             "dice": dice, "hd95": hd, "mae": mae, "r2": r2, "slope": slope,
             "after": after_txt, "bwt": bwt_stat,
+            "isl_dice": isl_dice, "isl_hd": isl_hd, "isl_bwt": isl_bwt, "seq": seq,
             "params_pct": float(np.mean(params)) if params else None,
         })
     order = ["lora", "lora_encoder_only", "sequential_linear", "sequential_ft", "pertask_lora"]
@@ -114,17 +136,21 @@ def main():
 
     print(f"\n=== Corrected protocol, n_shot={args.n_shot} "
           f"(held-out test set, whole-volume inference) ===\n")
-    hdr = ["Method", "seeds", "T1 Dice", "T1 HD95", "T2 MAE(yr)", "T2 R2", "T2 slope",
-           "T1 after T2", "BWT", "train%"]
+    three = any(r["isl_dice"] is not None for r in rows)
+    hdr = ["Method", "seq", "seeds", "T1 Dice", "T1 HD95"]
+    if three:
+        hdr += ["ISLES Dice", "ISLES HD95", "ISLES BWT"]
+    hdr += ["T2 MAE(yr)", "T2 R2", "T1 after last", "T1 BWT", "train%"]
     print(" | ".join(hdr))
     print("-|-".join("-" * len(h) for h in hdr))
     for r in rows:
-        print(" | ".join([
-            r["method"], str(r["n_seeds"]), fmt(r["dice"]), fmt(r["hd95"], 1),
-            fmt(r["mae"], 2), fmt(r["r2"]), fmt(r["slope"], 2),
-            r["after"], fmt(r["bwt"]),
-            f"{r['params_pct']:.3f}" if r["params_pct"] is not None else "--",
-        ]))
+        cells = [r["method"], "->".join(str(t) for t in r["seq"]), str(r["n_seeds"]),
+                 fmt(r["dice"]), fmt(r["hd95"], 1)]
+        if three:
+            cells += [fmt(r["isl_dice"]), fmt(r["isl_hd"], 1), fmt(r["isl_bwt"])]
+        cells += [fmt(r["mae"], 2), fmt(r["r2"]), r["after"], fmt(r["bwt"]),
+                  f"{r['params_pct']:.3f}" if r["params_pct"] is not None else "--"]
+        print(" | ".join(cells))
     print("\nNotes:")
     print("  * MAE is in years against real IXI ages (placeholder-age subjects excluded).")
     print("  * R2/slope near 0 means the model is predicting close to a constant.")
