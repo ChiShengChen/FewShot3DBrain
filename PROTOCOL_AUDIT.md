@@ -347,7 +347,7 @@ restructure §V.
 | Shot ablation 16 / 32 / 64 | **queued** #823–834: lora_head r16 + Seq. Linear × 3 seeds | `n16/`, `n64/` |
 | Random-init backbone control | **queued** #835–837: lora_head r16, no pretrained weights | `lora_head_r16_randinit/` |
 | EWC / LwF / Replay under the corrected protocol | ported, smoke-tested; **queued** #841–849, 3 seeds each, declared 6G | `ewc/`, `lwf/`, `replay/` |
-| Brain age with whole-brain input | 559 cubes at 96³, splits built, smoke-tested; **queued** #850–861: lora_head r16 / Seq. Linear / Seq. FT / BitFit × 3 seeds, `--tasks 5 --patch_size 96`, declared 5G from ×3.4 voxel scaling of the 64³ measurement | `*_t5/` |
+| Brain age with whole-brain input | 559 cubes at 96³, splits built, smoke-tested; **queued** #857–868: lora_head r16 / Seq. Linear / Seq. FT / BitFit × 3 seeds, `--tasks 5 --patch_size 96`, declared 5G from ×3.4 voxel scaling of the 64³ measurement | `*_t5/` |
 | PEFT comparator: BitFit | **queued** #838–840 (bias + output projection, 6.4K params = 0.028%) | `bitfit/` |
 | PEFT comparator: Adapter (Houlsby) | not planned — needs module insertion into the 3D U-Net; BitFit covers the low-budget comparison | — |
 | Extra seeds (45, 46) | not started | — |
