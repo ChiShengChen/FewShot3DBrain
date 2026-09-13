@@ -346,9 +346,10 @@ restructure §V.
 | Third task that works (ISLES 2022 lesion seg) | data prepared (247 cases); **pilot queued** #820–822, sequence 2→4→3, seed 42 | `*_t243/` |
 | Shot ablation 16 / 32 / 64 | **queued** #823–834: lora_head r16 + Seq. Linear × 3 seeds | `n16/`, `n64/` |
 | Random-init backbone control | **queued** #835–837: lora_head r16, no pretrained weights | `lora_head_r16_randinit/` |
-| EWC / LwF / Replay under the corrected protocol | **ported** to the driver (`--method ewc|lwf|replay`); CPU smoke running; not yet submitted | — |
-| Brain age with whole-brain input | prep script written (`prepare_ixi_wholebrain.py`, Task005_IXI_WB, 96³); not yet run | `Task005_IXI_WB/` |
-| Adapter / BitFit PEFT comparators | not started | — |
+| EWC / LwF / Replay under the corrected protocol | ported, smoke-tested; **queued** #841–849, 3 seeds each, declared 6G | `ewc/`, `lwf/`, `replay/` |
+| Brain age with whole-brain input | 559 cubes at 96³ prepared (3.7 GB), splits built; CPU smoke running; submission next | `Task005_IXI_WB/` |
+| PEFT comparator: BitFit | **queued** #838–840 (bias + output projection, 6.4K params = 0.028%) | `bitfit/` |
+| PEFT comparator: Adapter (Houlsby) | not planned — needs module insertion into the 3D U-Net; BitFit covers the low-budget comparison | — |
 | Extra seeds (45, 46) | not started | — |
 
 Queue depth is the constraint: 18 jobs of mine behind other users' at 8/8 slots. Runs are
