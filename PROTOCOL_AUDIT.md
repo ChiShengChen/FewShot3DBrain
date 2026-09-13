@@ -354,3 +354,32 @@ restructure §V.
 
 Queue depth is the constraint: 18 jobs of mine behind other users' at 8/8 slots. Runs are
 declared at 5G/6G VRAM, 2 CPU, 4G RAM from measurement.
+
+## 8. Three-task sequence pilot — BraTS → ISLES → IXI (seed 42)
+
+ISLES 2022 lesion segmentation (Task004, 247 cases, test 155 subjects) inserted between
+tumour segmentation and brain age. Same protocol as §5. `outputs/benchmark_v2/n32/*_t243/`.
+
+| Method | BraTS Dice | ISLES Dice (HD95) | Age MAE | BraTS after ISLES | BraTS after age | ISLES after age |
+|---|---|---|---|---|---|---|
+| LoRA + head, r=16 | 0.785 | 0.417 (96.6) | 14.82 | = (0) | = (0) | = (0) |
+| Sequential Linear | 0.795 | 0.412 (67.2) | 14.74 | 0.795 (0.000) | 0.795 (0.000) | 0.412 (0.000) |
+| Sequential FT | 0.798 | 0.387 (111.7) | 14.67 | **0.385 (−0.413)** | 0.590 (−0.208) | **0.187 (−0.200)** |
+
+**What this establishes**
+
+1. **ISLES works as a third task.** Dice ≈ 0.41 for both frozen methods, HD95 defined on all
+   155 cases; per-case distribution is bimodal (38/155 > 0.7, 60/155 < 0.3), as expected for
+   lesions with a median of ~775 voxels at 32 shots. Not a constant-predictor failure.
+2. **Same-type forgetting is severe.** Full fine-tuning loses 0.41 Dice on BraTS after
+   learning ISLES — more than after learning brain age in the two-task setting (−0.33) —
+   and 0.20 on ISLES after brain age. Non-monotone: BraTS partially recovers to 0.590 after
+   the regression task moves the encoder again.
+3. **Full fine-tuning is the worst method on ISLES** (0.387 vs 0.41–0.42), consistent with
+   overfitting small lesions at 32 shots when every parameter is free.
+4. **Frozen methods forget nothing across all three tasks**, adapter-isolated or
+   linear-probed alike.
+5. Brain age remains a negative result in the three-task setting (MAE 14.7–14.8).
+
+Seeds 43 and 44 submitted (6 jobs). The manuscript now carries a three-task section marked
+single-seed until they land.
