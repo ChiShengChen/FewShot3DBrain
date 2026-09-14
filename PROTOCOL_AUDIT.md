@@ -383,3 +383,81 @@ tumour segmentation and brain age. Same protocol as §5. `outputs/benchmark_v2/n
 
 Seeds 43 and 44 submitted (6 jobs). The manuscript now carries a three-task section marked
 single-seed until they land.
+
+## 9. Final results — all 66 runs complete (3 seeds each, 0 failures)
+
+Three findings overturn conclusions drawn earlier in this audit. All are from the corrected
+protocol, three seeds, paired over cases where stated.
+
+### 9.1 Whole-brain input rescues brain age — and LoRA is the only frozen method that learns it
+
+Re-running brain age with the whole head resampled to 96³ instead of a 64³ patch
+(`Task005_IXI_WB`):
+
+| Method | MAE (yr) | R² | pred. SD | vs. patch (64³) |
+|---|---|---|---|---|
+| **LoRA + head, r=16** | **10.22 ± 0.82** | **+0.40 ± 0.09** | 11.21 | 14.72 |
+| Sequential FT | 12.20 ± 0.17 | +0.15 ± 0.04 | 10.60 | 14.52 |
+| Sequential Linear | 14.65 ± 0.09 | −0.06 ± 0.03 | **0.09** | 14.64 |
+| BitFit | 14.63 ± 0.13 | −0.06 ± 0.02 | **0.09** | 14.60 |
+| constant baseline | 14.39 | 0.00 | 0 | — |
+
+Paired per-subject absolute error (n=750): LoRA + head beats the constant predictor by
+**−4.21 yr** (p=5e−31) and full fine-tuning by **−1.98 yr** (p=3e−9). Linear probing and
+BitFit still emit a constant (prediction SD 0.09 yr against a true 16.5).
+
+**The §5 "negative result for every method" was a property of the patch input, not of the
+task.** The corrected statement is that brain age needs global context, and once it has it,
+adapter capacity in the encoder is exactly what learns it — a 513-parameter head on a frozen
+encoder cannot, and full fine-tuning of 14M parameters does worse than 56K well-placed ones.
+This is now the paper's strongest positive result, and it favours LoRA.
+
+### 9.2 The FOMO pretrained checkpoint does not help — it slightly hurts
+
+Control: identical configuration with a randomly initialised backbone.
+
+| | Dice | HD95 | Age MAE (patch) |
+|---|---|---|---|
+| LoRA + head r=16, FOMO pretrained | 0.777 ± 0.004 | 43.2 ± 0.7 | 14.72 |
+| LoRA + head r=16, random init | **0.787 ± 0.013** | 43.0 ± 1.5 | 15.03 |
+
+Paired: **−0.009 Dice for pretraining** (95% CI [−0.012, −0.007], p=3e−9, n=820). The
+checkpoint is significantly *worse* than random initialisation for the frozen backbone on
+this task. The paper cannot claim a benefit from the foundation model; the mechanism it
+demonstrates is parameter-efficient adaptation of a frozen backbone, whatever that backbone
+contains. This must be stated plainly — it contradicts the framing of the original title.
+
+### 9.3 EWC, LwF and replay all forget *more* than unregularised fine-tuning
+
+| Method | Dice | BWT |
+|---|---|---|
+| Sequential FT | 0.798 ± 0.025 | −0.328 ± 0.062 |
+| EWC | 0.791 ± 0.029 | −0.388 ± 0.173 |
+| LwF | **0.804 ± 0.022** | **−0.564 ± 0.084** |
+| Replay | 0.772 ± 0.041 | −0.368 ± 0.108 |
+
+None mitigates forgetting at 32 shots across heterogeneous tasks; LwF is the most accurate
+and the worst forgetter. Their auxiliary losses are computed on encoder features, which the
+new task is free to move as long as the distillation/Fisher term is outweighed.
+
+### 9.4 Other completed results
+
+**Three-task sequence (3 seeds)** — full fine-tuning's forgetting is far worse and far more
+variable than seed 42 alone showed: BraTS after ISLES 0.385 / 0.295 / 0.013 by seed
+(mean 0.231 ± 0.158, BWT ≈ −0.55). Frozen methods: unchanged at every step. ISLES Dice
+0.437 (LoRA), 0.452 (linear), 0.417 (full FT).
+
+**Shot ablation (Dice):** the gap to linear probing closes with data —
+n=16: 0.655 vs 0.747; n=32: 0.777 vs 0.789; **n=64: 0.811 vs 0.811 (equal)**.
+
+**BitFit** is too small for segmentation (0.441 ± 0.034 at 6.4K parameters) and cannot learn
+brain age at all, which places LoRA's 94K as the useful point on the budget curve.
+
+### What the paper now argues
+
+1. Where the task needs global context and capacity (brain age, whole-brain), LoRA is the
+   only frozen method that learns it and beats full fine-tuning by 2 years.
+2. Where a large task-specific decoder already exists (segmentation), linear probing is
+   marginally better at 180× the parameters, and the two are equal by 64 shots.
+3. Forgetting-free is shared by all frozen methods; the CL baselines do not achieve it.
+4. Pretraining, as supplied, contributes nothing here.
