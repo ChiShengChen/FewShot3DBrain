@@ -37,6 +37,10 @@ def subject_id(path: str) -> str:
     m = re.match(r"(?:ixi_healthy_)?(IXI-\d+)", name)
     if m:
         return m.group(1)
+    # MSD hippocampus: one volume per subject, id in the filename.
+    m = re.match(r"(hippocampus_\d+)", name)
+    if m:
+        return m.group(1)
     # ISLES 2022: sub-strokecase0001_ses-0001 -> one subject, one session.
     m = re.match(r"(sub-strokecase\d+)", name)
     if m:

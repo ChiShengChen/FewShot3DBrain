@@ -50,6 +50,24 @@ TASK_CONFIGS = {
         "num_classes": 1,
         "modalities": 2,  # T1, T2
     },
+    # Sex classification on the same whole-head cubes as Task 5. A second global task with
+    # a tiny head, differing from brain age only in output type, so that the claim about
+    # where capacity must sit does not rest on a single task.
+    6: {
+        "name": "Task006_IXI_SEX",
+        "task_type": "classification",
+        "num_classes": 2,
+        "modalities": 2,  # T1, T2
+    },
+    # MSD Task04 hippocampus: a third segmentation task that shares none of BraTS/ISLES's
+    # incidental properties -- one T1 channel, healthy anatomy, large consistent foreground,
+    # and volumes smaller than the 64^3 window so the structure fits in one pass.
+    7: {
+        "name": "Task007_HIPPO",
+        "task_type": "segmentation",
+        "num_classes": 2,
+        "modalities": 1,  # T1
+    },
 }
 
 
