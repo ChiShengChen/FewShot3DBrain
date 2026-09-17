@@ -132,3 +132,26 @@ def test_unlabelled_segmentation_cases_are_excluded():
              if not np.any(np.asarray(np.load(f + "_seg.npy", mmap_mode="r")) > 0)]
     assert not empty, f"{len(empty)} unlabelled cases leaked into the pool, e.g. {empty[:3]}"
     assert len(kept) < len(raw), "expected the unlabelled challenge split to be filtered out"
+
+
+def test_single_channel_segmentation_label_survives(tmp_path):
+    """A one-channel volume has label.shape[0] == vol.shape[0]; an earlier guard read that
+    as a mis-loaded volume and substituted zeros, erasing the mask for any 1-channel task."""
+    base = str(tmp_path / "sample_000")
+    seg = np.zeros((40, 40, 40), dtype=np.uint8)
+    seg[10:20, 10:20, 10:20] = 1
+    np.save(base + ".npy", np.random.rand(1, 40, 40, 40).astype(np.float32))
+    np.save(base + "_seg.npy", seg[np.newaxis, ...])
+    ds = FewShotFOMODataset([base], patch_size=(64, 64, 64), task_type="segmentation")
+    item = ds[0]
+    assert item["label"].shape == (1, 64, 64, 64)
+    assert float(item["label"].sum()) == 1000.0, "single-channel mask was zeroed"
+
+
+def test_multi_channel_segmentation_label_still_works(tmp_path):
+    base = str(tmp_path / "sample_001")
+    seg = np.zeros((40, 40, 40), dtype=np.uint8); seg[5:15, 5:15, 5:15] = 1
+    np.save(base + ".npy", np.random.rand(3, 40, 40, 40).astype(np.float32))
+    np.save(base + "_seg.npy", seg[np.newaxis, ...])
+    ds = FewShotFOMODataset([base], patch_size=(64, 64, 64), task_type="segmentation")
+    assert float(ds[0]["label"].sum()) == 1000.0

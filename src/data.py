@@ -263,10 +263,17 @@ class FewShotFOMODataset(Dataset):
             label = np.asarray(label, dtype=np.float32)
             if label.ndim == 3:
                 label = label[np.newaxis, ...]
-            elif label.shape[0] == vol.shape[0]:  # mistakenly loaded volume
-                label = np.zeros((1,) + vol.shape[1:], dtype=np.float32)
-            else:
-                label = label[:1]
+            # Validate against the spatial shape, not the channel count. A previous guard
+            # here treated `label.shape[0] == vol.shape[0]` as "the volume was loaded by
+            # mistake" and substituted zeros, which is correct only while every
+            # segmentation task has more than one input channel: for a single-channel
+            # dataset a perfectly good mask has shape[0] == 1 == vol.shape[0] and was
+            # silently erased.
+            if label.shape[1:] != vol.shape[1:]:
+                raise ValueError(
+                    f"segmentation label {label.shape} does not match volume {vol.shape} "
+                    f"for {path}")
+            label = label[:1]
         
         if self.task_type == "classification":
             if label is None:
