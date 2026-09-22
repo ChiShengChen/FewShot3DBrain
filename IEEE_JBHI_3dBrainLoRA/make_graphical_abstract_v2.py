@@ -85,7 +85,7 @@ gs = fig.add_gridspec(4, 6, height_ratios=[0.07, 0.03, 0.55, 0.33],
                       hspace=0.22, wspace=0.12, left=0.05, right=0.97, top=0.96, bottom=0.04)
 
 ax = fig.add_subplot(gs[0, :]); ax.axis("off")
-ax.text(0.5, 0.5, "Few-Shot Continual Learning for 3D Brain MRI with Frozen Foundation Models",
+ax.text(0.5, 0.5, "Which Adaptation Strategy for a New Task?  A Controlled Study on 3D Brain MRI",
         ha="center", va="center", fontsize=20, fontweight="bold", color=INK)
 
 for cols, text, col, bg in [((0, 2), "Segmentation: 90× cheaper, −0.01 Dice", RED, "#fadbd8"),
