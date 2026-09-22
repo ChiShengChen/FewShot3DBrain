@@ -8,7 +8,7 @@
 
 ## Summary
 
-Eight defects were found. Together they invalidate **every regression number in the paper**,
+Nine defects were found. Together they invalidate **every regression number in the paper**,
 the reason Task 1 was dropped, the segmentation numbers' comparability, and the premise
 that a shared frozen pretrained backbone is used across the task sequence.
 
@@ -23,6 +23,7 @@ that a shared frozen pretrained backbone is used across the task sequence.
 
 | 7 | 219 unlabelled BraTS cases written as empty masks | 17% of every segmentation score | **fixed** |
 | 8 | `np.loadtxt(dtype=int64)` is a hard error on numpy 2.x | Would crash Task 1 on the real env | **fixed** |
+| 9 | Channel-count guard zeroed masks for 1-channel datasets | All hippocampus results (Dice 0.000, val said 1.000) | **fixed** |
 
 Two further data problems are **flagged, not fixed** — they need a decision (see the end).
 
@@ -461,3 +462,45 @@ brain age at all, which places LoRA's 94K as the useful point on the budget curv
    marginally better at 180× the parameters, and the two are equal by 64 shots.
 3. Forgetting-free is shared by all frozen methods; the CL baselines do not achieve it.
 4. Pretraining, as supplied, contributes nothing here.
+
+## 10. Replication on two held-out task families (2026-09-22)
+
+Both headline patterns rested on one task each. Two tasks were added, chosen to share as
+little as possible with the originals, and both patterns hold. All 102 runs complete, no
+failures.
+
+| Task | Type | LoRA+head r16 | Seq. Linear | Seq. FT | BitFit |
+|---|---|---|---|---|---|
+| T1 BraTS glioma | seg 3ch | 0.777 ± 0.004 | **0.789 ± 0.005** | 0.798 ± 0.025 | 0.441 ± 0.034 |
+| T3 ISLES stroke | seg 3ch | 0.437 ± 0.035 | **0.452 ± 0.029** | 0.417 ± 0.022 | — |
+| T4 MSD hippocampus | seg 1ch | 0.872 ± 0.002 | **0.883 ± 0.001** | 0.898 ± 0.001 | 0.378 ± 0.029 |
+| T2 IXI brain age | reg MAE | **10.22 ± 0.82** | 14.65 (const) | 12.20 ± 0.17 | 14.63 (const) |
+| T5 IXI sex | cls AUC | **0.876 ± 0.079** | 0.717 (const) | 0.822 ± 0.050 | 0.743 (const) |
+
+**Segmentation margin is strikingly stable.** LoRA − linear probing, paired per case:
+BraTS −0.0115 (p=3e−10, n=820), ISLES −0.0146 (p=0.15, n=465), hippocampus −0.0107
+(p=4e−38, n=504). The three tasks differ in channel count (3/3/1), pathology vs healthy
+anatomy, foreground fraction (<0.1% vs 4.7%) and whether the structure fits the inference
+window — yet the margin is 0.011–0.015 throughout. What they share is the 8.45M-parameter
+decoder, which is the variable that explains it.
+
+**Sex classification sharpens the mechanism.** LoRA AUC 0.876 / per-case accuracy 0.780
+beats full fine-tuning's 0.822 / 0.672 (McNemar p=8e−8). Linear probing and BitFit have
+balanced accuracy of exactly 0.500 on every seed — a constant decision — yet AUCs of 0.717
+and 0.743, well above chance. **The frozen features contain the signal; a 1K-parameter head
+cannot turn it into a decision boundary.** The bottleneck is geometry, not information.
+The brain-age result alone could not have shown this.
+
+**Full fine-tuning is not uniformly best**: it wins on BraTS (+0.021) and hippocampus
+(+0.026) but loses on ISLES (−0.020, p=0.23), consistent with overfitting 32 small lesions.
+
+### Defect 9: a channel-count guard erased single-channel masks
+
+`FewShotFOMODataset.__getitem__` treated `label.shape[0] == vol.shape[0]` as evidence that a
+volume had been loaded instead of a mask, and substituted zeros. True only while every
+segmentation task has >1 input channel; hippocampus (1-channel T1) has a correct mask with
+`shape[0] == 1 == vol.shape[0]`, so every mask was erased. All four methods scored Dice
+0.000 on test while validation reported **1.000**, because the pooled Dice of two empty
+masks is (0+eps)/(0+eps). Labels on disk were correct: 2948 foreground voxels became 0 in
+`__getitem__`. Now compares spatial shapes and raises on mismatch. Third instance in this
+codebase of a defensive fallback silently destroying real labels.

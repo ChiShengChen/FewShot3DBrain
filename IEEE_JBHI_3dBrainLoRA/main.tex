@@ -42,7 +42,7 @@ and Fan Zhang$^{4}$
 \maketitle
 
 \begin{abstract}
-Foundation models pretrained on large 3D medical imaging corpora must often be adapted to a sequence of downstream tasks from few labeled examples, without revisiting earlier tasks' data. We study this few-shot continual setting on 3D brain MRI with a frozen 3D U-Net adapted by one Low-Rank Adaptation (LoRA) module and output head per task, over a sequence of glioma segmentation (BraTS 2023), stroke-lesion segmentation (ISLES 2022) and brain-age regression (IXI) at 32 labeled volumes each, under a subject-grouped held-out protocol with whole-volume inference and three seeds. Three results stand out. First, where a task needs global context and encoder capacity---brain age from whole-head input---LoRA is the only frozen method that learns it at all, reaching MAE $10.22\pm0.82$\,yr ($R^2=0.40$) against a constant-predictor baseline of 14.4\,yr, beating full fine-tuning of 14M parameters by 1.98\,yr ($p=3{\times}10^{-9}$) with 56K trainable, while frozen-encoder linear probing and BitFit emit a constant. Second, where a large task-specific decoder already exists---segmentation---linear probing is marginally better (Dice $0.789\pm0.005$ vs.\ $0.777\pm0.004$) at 90$\times$ the trainable parameters, and the two are equal by 64 shots. Third, a naive reading of ``frozen backbone'' that also freezes the 66-parameter output projection costs 0.22 Dice. We further report two negative results: EWC, LwF and experience replay all forget \emph{more} than unregularised fine-tuning in this regime, and the pretrained checkpoint we use is not better than random initialisation for the frozen backbone ($-0.009$ Dice, $p=3{\times}10^{-9}$), so the mechanism we demonstrate is parameter-efficient adaptation rather than transfer from pretraining. Code, splits, per-case predictions and the corrected evaluation protocol are released.
+Foundation models pretrained on large 3D medical imaging corpora must often be adapted to a sequence of downstream tasks from few labeled examples, without revisiting earlier tasks' data. We study this few-shot continual setting on 3D brain MRI with a frozen 3D U-Net adapted by one Low-Rank Adaptation (LoRA) module and output head per task, across five tasks spanning three output types at 32 labeled volumes each---glioma segmentation (BraTS 2023), stroke-lesion segmentation (ISLES 2022), hippocampus segmentation (MSD), brain-age regression and sex classification (IXI)---under a subject-grouped held-out protocol with whole-volume inference and three seeds. Whether a frozen backbone with small adapters suffices turns out to depend on where the task needs capacity, and the two task families answer oppositely and consistently. On all three segmentation tasks, which inherit a large task-shaped decoder, full-decoder linear probing edges LoRA by a strikingly stable margin (0.011--0.015 Dice) while training 90$\times$ more parameters. On both global tasks, which have only a $\sim$1K-parameter head over pooled features, LoRA is the only frozen method that learns them: brain age MAE $10.22\pm0.82$\,yr ($R^2=0.40$) against a 14.4\,yr constant baseline, and sex AUC $0.876\pm0.079$, in each case beating full fine-tuning of 14M parameters (by 1.98\,yr, $p=3{\times}10^{-9}$; and by 0.11 in per-case accuracy, $p=8{\times}10^{-8}$) with 56K trainable, while linear probing and BitFit collapse to a constant output. A naive reading of ``frozen backbone'' that also freezes the 66-parameter output projection costs 0.22 Dice. We additionally report two negative results: EWC, LwF and experience replay all forget \emph{more} than unregularised fine-tuning here, and the pretrained checkpoint is no better than random initialisation for the frozen backbone ($-0.009$ Dice, $p=3{\times}10^{-9}$), so what we demonstrate is parameter-efficient adaptation rather than transfer. Code, splits, per-case predictions and the corrected evaluation protocol are released.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -63,12 +63,12 @@ Answering those questions required first fixing how they are measured. In the co
 
 Our findings and contributions are:
 \begin{itemize}
-\item \textbf{Where capacity placement matters, LoRA wins outright.} Given whole-head input, brain age is learnable at 32 shots: LoRA with a trainable head reaches MAE $10.22\pm0.82$\,yr and $R^2=0.40$, beating the constant predictor by 4.21\,yr ($p=5{\times}10^{-31}$) and full fine-tuning by 1.98\,yr ($p=3{\times}10^{-9}$). Linear probing of a 513-parameter head on the frozen encoder, and BitFit, both collapse to a constant (prediction SD 0.09\,yr against a true 16.5). The same task from $64^3$ patches is unlearnable for every method---the failure was the input, not the task.
-\item \textbf{Where a large task head already exists, LoRA trades a little accuracy for 90$\times$ fewer parameters.} On glioma segmentation, LoRA + head at rank 16 reaches Dice $0.777\pm0.004$ against $0.789\pm0.005$ for full-decoder linear probing (paired $-0.012$, $p=3{\times}10^{-10}$) while training 93.8K rather than 8.45M parameters; at 64 shots the two are equal (0.811 both).
+\item \textbf{Where a task has no large head, LoRA is necessary, not merely economical---shown twice.} On whole-head input, brain age reaches MAE $10.22\pm0.82$\,yr ($R^2=0.40$) against a constant baseline of 14.4, and sex classification AUC $0.876\pm0.079$; both beat full fine-tuning of every parameter (by 1.98\,yr and by 0.11 per-case accuracy respectively) with 56K trainable. Frozen-encoder linear probing and BitFit collapse to a constant output on both, despite the frozen features carrying usable signal (linear-probe sex AUC 0.717, well above chance): the information is present but unusable without moving the representation.
+\item \textbf{Where a large task head already exists, LoRA gives up a small, stable margin for 90$\times$ fewer parameters---shown three times.} Across glioma, stroke-lesion and hippocampus segmentation, full-decoder linear probing leads by $0.012$, $0.015$ and $0.011$ Dice respectively while training 8.45M parameters against 93.8K; at 64 shots the two are equal.
 \item \textbf{A 66-parameter configuration detail dominates.} Leaving the segmentation output projection frozen, as ``frozen backbone'' naively implies, costs $0.217$ Dice ($p<10^{-130}$) and triples seed variance.
 \item \textbf{Forgetting-free is shared, and the standard remedies do not deliver it.} Adapter isolation and frozen-encoder probing both have BWT exactly zero over a three-task sequence in which full fine-tuning loses $0.55$ Dice; EWC, LwF and replay all forget \emph{more} than unregularised fine-tuning ($-0.39$, $-0.56$, $-0.37$ vs.\ $-0.33$).
 \item \textbf{A negative result on pretraining.} The pretrained checkpoint is not better than random initialisation for the frozen backbone ($-0.009$ Dice, $p=3{\times}10^{-9}$). We therefore claim parameter-efficient adaptation, not transfer.
-\item \textbf{A corrected evaluation protocol and code}, with tests that guard the label-handling and split-leakage failures we encountered.
+\item \textbf{A corrected evaluation protocol and code}, with tests that guard the label-handling and split-leakage failures we encountered---including one that silently zeroed every mask of a single-channel dataset while validation reported a perfect score.
 \end{itemize}
 
 
@@ -225,15 +225,19 @@ where $p_i$ is the softmax foreground probability at voxel $i$, $g_i$ the binary
 \subsection{Datasets}
 \label{sec:data}
 
-\textbf{Notation.} T1 denotes tumor segmentation, T2 brain-age regression, and T3 stroke-lesion segmentation. The main comparison uses the sequence T1$\to$T2; Section~\ref{sec:res_forgetting} also reports the sequence T1$\to$T3$\to$T2.
+\textbf{Notation.} We use five tasks: T1 glioma segmentation, T2 brain-age regression, T3 stroke-lesion segmentation, T4 hippocampus segmentation and T5 sex classification. T1--T3 are trained in sequence (Sec.~\ref{sec:res_forgetting}); T4 and T5 are single-task evaluations that test whether the two patterns we find replicate on a segmentation task and a global task drawn from outside the original pair.
 
 \textbf{T1: BraTS 2023 Glioma}~\cite{brats2023}. We use the 1251 labeled volumes of the training release, with channels T2w, T2-FLAIR and T1c and a binary whole-tumor mask derived from the expert annotation. The challenge's validation release ships without segmentations and is excluded; an earlier pipeline had written those 219 volumes with all-zero masks, which are indistinguishable from a tumor-free label and had contaminated 17\% of the test set. Several subjects contribute more than one longitudinal timepoint; these are kept in the same split.
 
 \textbf{T2: IXI}~\cite{ixi}. Of the 577 subjects with both T1 and T2 scans, 559 have a usable age in the IXI demographics table (15 have no table entry, 3 have a missing age) and are used; none is imputed. Test-set ages span 20.0--86.3\,yr (mean 50.0, SD 16.5).
 
-\textbf{T3: ISLES 2022.} Ischemic-stroke lesion segmentation with channels DWI, ADC and FLAIR (FLAIR resampled onto the DWI grid) and the expert lesion mask; 247 of the 250 cases are used, three being excluded because their mask emptied under 1\,mm resampling. Lesions are small (median $\approx$775 voxels), which makes this a harder segmentation task than T1 and one drawn from a single cohort, so unlike an earlier infarct-\emph{classification} design that contrasted ISLES with IXI controls, it carries no acquisition confound.
+\textbf{T3: ISLES 2022}~\cite{isles2022}. Ischemic-stroke lesion segmentation with channels DWI, ADC and FLAIR (FLAIR resampled onto the DWI grid) and the expert lesion mask; 247 of the 250 cases are used, three being excluded because their mask emptied under 1\,mm resampling. Lesions are small (median $\approx$775 voxels), which makes this a harder segmentation task than T1 and one drawn from a single cohort, so unlike an earlier infarct-\emph{classification} design that contrasted ISLES with IXI controls, it carries no acquisition confound.
 
 \textbf{T2 (whole-head variant).} Because patch input proved to be the limiting factor for regression (Sec.~\ref{sec:res_age}), we also prepare each IXI subject as a single $96^3$ cube: the volume is cropped to its non-zero content and resampled, so one forward pass sees the entire head. The task, labels, splits and metrics are otherwise identical, and models are run with a $96^3$ window, which makes the crop the identity and evaluation a single window.
+
+\textbf{T4: MSD Task04 hippocampus}~\cite{msd}. 260 single-channel T1 volumes with anterior and posterior hippocampus labels, merged to binary. This task shares none of the incidental properties of T1 and T3: one input channel rather than three, healthy anatomy rather than pathology, a large consistent foreground (4.7\% of voxels against $<$0.1\% for a lesion), and volumes of roughly $35{\times}51{\times}35$ that fit inside the $64^3$ window, so the whole structure is visible in one forward pass. It therefore tests whether the segmentation result is about the presence of a large decoder or about tumours.
+
+\textbf{T5: IXI sex classification.} The same 559 subjects, scans, modalities and whole-head $96^3$ cubes as T2, labelled instead by the sex recorded in the IXI demographics table (247 male, 312 female; majority-class accuracy 0.56). It differs from T2 only in output type, which makes it a direct test of whether the regression finding is about the output or about where capacity must sit. It also restores a classification task to the study after an earlier infarct-detection formulation proved confounded (Sec.~\ref{sec:limitations}).
 
 \textbf{Data use.} BraTS 2023 was obtained from Synapse (syn51156910) under its Data Use Agreement; IXI is publicly available at \url{https://brain-development.org/ixi-dataset/}; ISLES 2022 is distributed under CC BY 4.0 (Zenodo 7153326). No additional ethics approval was required.
 
@@ -433,6 +437,39 @@ constant predictor    & 14.39 & 0.00 & 0 & 14.39 \\
 \end{tabular}
 \end{table}
 
+\subsection{Both Patterns Replicate on Held-Out Task Families}
+\label{sec:res_replicate}
+
+The two findings above each rested on a single task. Table~\ref{tab:five} adds a segmentation task and a global task chosen to share as little as possible with the originals, and both patterns hold.
+
+\textbf{Segmentation.} On hippocampus segmentation---one channel, healthy anatomy, a foreground two orders of magnitude larger than a lesion, and volumes that fit inside the inference window---linear probing again leads LoRA, by $0.011$ Dice (paired, 95\% CI $[0.009, 0.012]$, $p=4{\times}10^{-38}$). Across the three segmentation tasks the margin is $0.012$, $0.015$ and $0.011$: a remarkably stable quantity given that the tasks differ in modality count, pathology, foreground fraction and input scope. The property that predicts it is the one they share---an 8.45M-parameter decoder that is already task-shaped and can simply be trained.
+
+\textbf{Global tasks.} On sex classification, LoRA reaches AUC $0.876\pm0.079$ and per-case accuracy 0.780, against full fine-tuning's $0.822$ and 0.672 (McNemar $p=8{\times}10^{-8}$). Linear probing and BitFit again produce a \emph{constant} decision: balanced accuracy exactly $0.500\pm0.000$ on every seed. Their AUCs, however, are 0.717 and 0.743---well above chance. This sharpens the mechanism: the frozen features do carry sex information, enough to rank subjects correctly most of the time, but a 1K-parameter head over pooled features cannot turn that ranking into a usable decision boundary. Moving the representation is what converts present-but-unusable signal into a working classifier, and 56K low-rank parameters do it better than releasing all 14M.
+
+\begin{table*}[t]
+\caption{All five tasks, $N_k=32$, mean $\pm$ SD over seeds 42--44. Segmentation reports Dice$\uparrow$; brain age MAE in years$\downarrow$; sex AUC$\uparrow$. ``const.'' marks a method whose output does not vary with the input (prediction SD $0.09$\,yr for brain age; balanced accuracy exactly $0.500$ for sex). BitFit was not run on ISLES. Trainable counts are for the segmentation configuration (T1) and the global configuration (T2/T5).}
+\label{tab:five}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llcccc}
+\toprule
+Task & Type & LoRA + head, $r{=}16$ & Sequential Linear & Sequential FT & BitFit \\
+\midrule
+\multicolumn{6}{l}{\emph{Tasks with a large task-specific decoder}} \\
+T1 BraTS glioma      & seg, 3\,ch & $0.777\pm0.004$ & $\mathbf{0.789\pm0.005}$ & $0.798\pm0.025$ & $0.441\pm0.034$ \\
+T3 ISLES stroke      & seg, 3\,ch & $0.437\pm0.035$ & $\mathbf{0.452\pm0.029}$ & $0.417\pm0.022$ & --- \\
+T4 MSD hippocampus   & seg, 1\,ch & $0.872\pm0.002$ & $\mathbf{0.883\pm0.001}$ & $0.898\pm0.001$ & $0.378\pm0.029$ \\
+\midrule
+\multicolumn{6}{l}{\emph{Tasks with only a $\sim$1K-parameter head}} \\
+T2 IXI brain age     & reg (MAE) & $\mathbf{10.22\pm0.82}$ & 14.65 (const.) & $12.20\pm0.17$ & 14.63 (const.) \\
+T5 IXI sex           & cls (AUC) & $\mathbf{0.876\pm0.079}$ & 0.717 (const.) & $0.822\pm0.050$ & 0.743 (const.) \\
+\midrule
+Trainable (seg / global) & & 93.8K / 56.4K & 8.45M / 1.0K & 22.6M / 14.1M & 6.4K / 5.0K \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
 \subsection{Forgetting}
 \label{sec:res_forgetting}
 
@@ -477,11 +514,13 @@ We report this plainly: with this checkpoint, on these tasks, at this shot count
 \subsection{When Is an Adapter the Right Tool?}
 \label{sec:strengths}
 
-Our two task types answer this in opposite directions, and the contrast is the useful part.
+Our two task families answer this in opposite directions, each replicated on a task chosen to share little with the original, and the contrast is the useful part.
 
-\textbf{When the task head is large, adapters buy economy.} Segmentation inherits a 8.45M-parameter decoder that is already task-shaped; training it is a strong and simple baseline, and LoRA + head matches it to within 0.012 Dice at 90$\times$ fewer trainable parameters, closing to equality by 64 shots. Here the argument for adapters is cost---93.8K parameters and under 400\,KB per task on disk, against a 34\,MB decoder per task---not accuracy.
+\textbf{When the task head is large, adapters buy economy.} Segmentation inherits an 8.45M-parameter decoder that is already task-shaped; training it is a strong and simple baseline, and LoRA + head stays within 0.011--0.015 Dice of it on three tasks that otherwise share almost nothing---three modalities or one, pathology or healthy anatomy, a lesion occupying $<$0.1\% of voxels or a structure occupying 4.7\%---while training 90$\times$ fewer parameters, and closing to equality by 64 shots. The stability of that margin across such different tasks is itself the evidence that what matters is the decoder, not the imaging problem. Here the argument for adapters is cost---93.8K parameters and under 400\,KB per task on disk, against a 34\,MB decoder per task---not accuracy.
 
-\textbf{When there is no task head to speak of, adapters are necessary.} Brain-age regression attaches a 513-parameter regressor to pooled encoder features. On whole-head input, that head cannot learn the task from frozen features, and neither can bias-only adaptation: both emit a constant. LoRA's 56K encoder parameters can, reaching MAE 10.2\,yr, and they do better than releasing all 14M. The representation itself has to move, and low-rank movement is enough---indeed better than unconstrained movement at 32 shots, where full fine-tuning overfits.
+\textbf{When there is no task head to speak of, adapters are necessary.} Brain age and sex both attach a $\sim$1K-parameter head to pooled encoder features. On whole-head input neither is learnable from frozen features, and bias-only adaptation does not help: both emit a constant---a fixed age, or a single class on every subject. LoRA's 56K encoder parameters learn both, and do better than releasing all 14M, which overfits 32 examples.
+
+Sex classification says something the regression result could not. Linear probing's AUC is 0.717 and BitFit's 0.743: the frozen features rank subjects by sex far better than chance, so the information is \emph{present}. What the 1K-parameter head cannot do is convert that ranking into a decision---its balanced accuracy is exactly 0.500. The bottleneck is therefore not missing information but an unusable geometry, and moving the representation is what makes the signal exploitable. This is the clearest statement we can give of why parameter-efficient adaptation is not interchangeable with a bigger readout.
 
 \textbf{Forgetting-free is a property of freezing, not of adapters.} Adapter isolation and frozen-encoder probing both have BWT zero; the distinction between them is Table~\ref{tab:params}, not the BWT column. What is worth reporting is the other side: none of EWC, LwF or replay achieved it, all forgetting more than plain fine-tuning at this scale, and full fine-tuning's loss on an earlier task of the \emph{same} type ranged from 0.40 to 0.77 Dice across seeds. If prior-task performance matters, freezing is the reliable route and the standard remedies are not.
 
@@ -492,6 +531,8 @@ Our two task types answer this in opposite directions, and the contrast is the u
 
 \textbf{Pretraining is not shown to help.} The central negative control (Sec.~\ref{sec:res_pretrain}) finds the FOMO checkpoint no better than random initialisation, and slightly worse. Our results support parameter-efficient adaptation of a frozen backbone, not transfer from large-scale pretraining, and the reader should not generalise them to other checkpoints or scales.
 
+\textbf{Five tasks, but four data sources and one imaging domain.} Brain age and sex share subjects and scans, so they are not independent evidence about data, only about output type; and all five tasks are brain MRI. Whether the pattern holds for other anatomy or modalities is untested.
+
 \textbf{Three seeds, one architecture, one shot count for most results.} Means and SDs are over three training runs; the paired tests pool cases across those runs and test the per-case difference, not run-to-run variability. Only the shot ablation spans 16--64 shots, and only on two methods.
 
 \textbf{Task identity is given at inference.} Adapter selection assumes the task is known; task-agnostic routing is not addressed, and it is the obvious next step for a deployed system.
@@ -500,6 +541,8 @@ Our two task types answer this in opposite directions, and the contrast is the u
 
 \textbf{Brain age is improved, not solved.} MAE 10.2\,yr with $R^2=0.40$ beats a constant by a wide margin but is far from the 3--4\,yr that large supervised cohorts achieve; 32 labeled subjects and a $96^3$ resampling are the obvious constraints.
 
+\textbf{Hippocampus and sex are single-task evaluations.} T4 and T5 are run on their own rather than inside the continual sequence; they test the accuracy patterns, not forgetting, which the three-task sequence covers.
+
 \textbf{Infarct detection as classification excluded.} A binary infarct-detection formulation contrasting ISLES with IXI controls was prepared but is not reported: the positive class carries DWI, FLAIR and ADC channels and the negative class T1 and T2 with zero-filled channels, so the classes differ by acquisition rather than pathology and any classifier score would be uninterpretable. We use ISLES for lesion segmentation instead, where the cohort is internally consistent.
 
 \textbf{No augmentation.} Few-shot results would likely improve with it for all methods; we omit it to keep the method comparison clean.
@@ -507,7 +550,7 @@ Our two task types answer this in opposite directions, and the contrast is the u
 \section{Conclusion}
 \label{sec:conclusion}
 
-We evaluated task-specific LoRA on a frozen 3D U-Net for few-shot continual adaptation across glioma segmentation, stroke-lesion segmentation and brain-age regression, under a subject-grouped held-out protocol with whole-volume inference and three seeds. Whether a frozen backbone with small adapters suffices depends on where the task needs capacity. For segmentation, which inherits a large decoder, LoRA + head trails full-decoder linear probing by 0.012 Dice at 90$\times$ fewer trainable parameters and equals it at 64 shots. For brain age from whole-head input, LoRA is the only frozen method that learns the task at all---MAE $10.22\pm0.82$\,yr against a constant baseline of 14.4---and beats full fine-tuning by 2 years with 56K parameters instead of 14M; the same task from $64^3$ patches is unlearnable for every method, so input scope, not the method, was the earlier barrier. Freezing delivers zero backward transfer, which EWC, LwF and replay all fail to do, each forgetting more than unregularised fine-tuning. Finally, the pretrained checkpoint is not better than random initialisation for the frozen backbone, so what we demonstrate is parameter-efficient adaptation rather than transfer. The corrected protocol, splits, per-case predictions and tests are released so that these results can be reproduced and extended.
+We evaluated task-specific LoRA on a frozen 3D U-Net for few-shot continual adaptation across glioma segmentation, stroke-lesion segmentation and brain-age regression, under a subject-grouped held-out protocol with whole-volume inference and three seeds. Whether a frozen backbone with small adapters suffices depends on where the task needs capacity, and the answer replicates in both directions. On three segmentation tasks that inherit a large decoder and otherwise share almost nothing, LoRA + head trails full-decoder linear probing by a stable 0.011--0.015 Dice at 90$\times$ fewer trainable parameters, and equals it at 64 shots. On both tasks with only a $\sim$1K-parameter head over pooled features---brain age and sex, from whole-head input---LoRA is the only frozen method that learns them at all (MAE $10.22\pm0.82$\,yr against a 14.4 constant; AUC $0.876\pm0.079$), beating full fine-tuning in each case with 56K parameters instead of 14M, while linear probing and BitFit emit a constant despite their features carrying above-chance signal. Brain age from $64^3$ patches is unlearnable for every method, so input scope, not the method, was the earlier barrier. Freezing delivers zero backward transfer, which EWC, LwF and replay all fail to do, each forgetting more than unregularised fine-tuning. Finally, the pretrained checkpoint is not better than random initialisation for the frozen backbone, so what we demonstrate is parameter-efficient adaptation rather than transfer. The corrected protocol, splits, per-case predictions and tests are released so that these results can be reproduced and extended.
 
 \bibliographystyle{IEEEtran}
 \bibliography{reference}
