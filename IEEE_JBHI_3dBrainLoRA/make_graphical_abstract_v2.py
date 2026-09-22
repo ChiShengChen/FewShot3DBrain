@@ -88,44 +88,41 @@ ax = fig.add_subplot(gs[0, :]); ax.axis("off")
 ax.text(0.5, 0.5, "Few-Shot Continual Learning for 3D Brain MRI with Frozen Foundation Models",
         ha="center", va="center", fontsize=20, fontweight="bold", color=INK)
 
-for cols, text, col, bg in [((0, 2), "Accuracy vs. trainable parameters", RED, "#fadbd8"),
+for cols, text, col, bg in [((0, 2), "Segmentation: 90× cheaper, −0.01 Dice", RED, "#fadbd8"),
                             ((2, 4), "Frozen backbone + per-task LoRA", "#2c3e50", None),
-                            ((4, 6), "Brain age: only LoRA learns it", BLUE, "#d4e6f1")]:
+                            ((4, 6), "Global tasks: only LoRA learns them", BLUE, "#d4e6f1")]:
     a = fig.add_subplot(gs[1, cols[0]:cols[1]]); a.axis("off")
     kw = dict(bbox=dict(boxstyle="round,pad=0.3", facecolor=bg, edgecolor=col, alpha=0.9)) if bg else {}
     a.text(0.5, 0.5, text, ha="center", va="center", fontsize=13, fontweight="bold", color=col,
            transform=a.transAxes, **kw)
 
-# ── panel 1: Dice vs. trainable parameters (log x) ───────────────────
+# ── panel 1: the segmentation margin, replicated across three tasks ──
 axl = fig.add_subplot(gs[2, 0:2])
-# label placement: linear probe and full FT sit close on the log axis, so one goes below.
-place = {"lora": (0, -30, "top"), "lora_head_r16": (0, 26, "bottom"),
-         "sequential_linear": (-6, -30, "top"), "sequential_ft": (0, 26, "bottom")}
-for k in ("lora", "lora_head_r16", "sequential_linear", "sequential_ft"):
-    m, s, _ = dice[k]
-    axl.errorbar(params[k], m, yerr=s, fmt="o", ms=11, color=colour[k], ecolor=colour[k],
-                 capsize=4, elinewidth=2, markeredgecolor="white", markeredgewidth=1.5, zorder=3)
-    dx, dy, va = place[k]
-    axl.annotate(label[k], (params[k], m), xytext=(dx, dy), textcoords="offset points",
-                 ha="center", va=va, fontsize=9.5, color=colour[k], fontweight="bold", linespacing=1.1)
-axl.set_xscale("log")
-axl.set_xlim(1.5e4, 6e7)
-lo = min(d[0] for d in dice.values()) - 0.12
-axl.set_ylim(lo, 0.86)
-axl.set_xlabel("trainable parameters (log scale)", fontsize=10, color=GREY)
-axl.set_ylabel("BraTS whole-tumour Dice (held-out)", fontsize=10, color=GREY)
-axl.grid(True, which="major", alpha=0.25)
+segs = [("BraTS\nglioma", "lora_head_r16", "sequential_linear", "task2"),
+        ("ISLES\nstroke", "lora_head_r16_t243", "sequential_linear_t243", "task4"),
+        ("MSD\nhippocampus", "lora_head_r16_t7", "sequential_linear_t7", "task7")]
+x = np.arange(len(segs)); w = 0.36
+lo_v = [stat(load(a), t, "dice")[0] for _, a, _, t in segs]
+lo_e = [stat(load(a), t, "dice")[1] for _, a, _, t in segs]
+sl_v = [stat(load(b), t, "dice")[0] for _, _, b, t in segs]
+sl_e = [stat(load(b), t, "dice")[1] for _, _, b, t in segs]
+axl.bar(x - w/2, lo_v, w, yerr=lo_e, color=GREEN, edgecolor="white", linewidth=1.5,
+        error_kw=dict(ecolor="#333", lw=1.4, capsize=3), label="LoRA + head (93.8K)", zorder=3)
+axl.bar(x + w/2, sl_v, w, yerr=sl_e, color=BLUE, edgecolor="white", linewidth=1.5,
+        error_kw=dict(ecolor="#333", lw=1.4, capsize=3), label="linear probe (8.45M)", zorder=3)
+for xi, a, b in zip(x, lo_v, sl_v):
+    axl.text(xi, max(a, b) + 0.055, f"{a - b:+.3f}", ha="center", fontsize=10,
+             color=GREEN, fontweight="bold")
+axl.set_xticks(x); axl.set_xticklabels([n for n, *_ in segs], fontsize=9.5)
+axl.set_ylabel("Dice (held-out, per case)", fontsize=10, color=GREY)
+axl.set_ylim(0, 1.16)
+axl.grid(True, axis="y", alpha=0.25)
 axl.tick_params(labelsize=9)
+axl.legend(fontsize=8.5, loc="upper left", frameon=False, bbox_to_anchor=(0.0, 0.99))
 for sp in axl.spines.values():
     sp.set_edgecolor(RED); sp.set_linewidth(2)
-axl.text(0.02, 0.03, f"n = 32 shots, mean ± SD over {n_seeds_two} seeds", transform=axl.transAxes,
+axl.text(0.02, -0.15, "3 seeds · margin is 0.011–0.015 on all three", transform=axl.transAxes,
          fontsize=8.5, color=GREY, style="italic")
-# highlight the 90x gap
-axl.annotate("", xy=(params["sequential_linear"], dice["lora_head_r16"][0] - 0.06),
-             xytext=(params["lora_head_r16"], dice["lora_head_r16"][0] - 0.06),
-             arrowprops=dict(arrowstyle="<->", color=GREEN, lw=2))
-axl.text(np.sqrt(params["sequential_linear"] * params["lora_head_r16"]), dice["lora_head_r16"][0] - 0.075,
-         "90× fewer parameters,\n−0.012 Dice", ha="center", va="top", fontsize=9, color=GREEN, fontweight="bold")
 
 # ── panel 2: framework diagram (schematic still valid) ───────────────
 axc = fig.add_subplot(gs[2, 2:4]); axc.axis("off")
@@ -170,15 +167,19 @@ axr.text(0.02, -0.16, "3 seeds · from $64^3$ patches every method sits at the b
 lh, sl = dice["lora_head_r16"][0], dice["sequential_linear"][0]
 gap = paired_dice("lora_head_r16", "sequential_linear")      # paired, as in Table III
 gain = paired_dice("lora_head", "lora")                       # both at r = 8: the 66-param effect alone
+sex = {k: load(k + "_t6") for k in ("lora_head_r16", "sequential_ft", "sequential_linear", "bitfit")}
+auc_l = stat(sex["lora_head_r16"], "task6", "auc")[0]
+auc_f = stat(sex["sequential_ft"], "task6", "auc")[0]
+auc_p = stat(sex["sequential_linear"], "task6", "auc")[0]
 findings = [
-    {"icon": f"{mae_wb[0]:.1f} yr MAE", "title": "Brain age: LoRA alone learns it",
-     "desc": f"vs. {const:.1f} yr constant baseline and\n{mae_wb[1]:.1f} yr for full fine-tuning;\nlinear probing stays constant",
+    {"icon": f"{mae_wb[0]:.1f} yr | {auc_l:.2f} AUC", "title": "Two global tasks, same answer",
+     "desc": f"Brain age {mae_wb[0]:.1f} vs {const:.1f} constant;\nsex AUC {auc_l:.2f} vs {auc_f:.2f} full fine-tune;\nlinear probe outputs a constant on both",
      "color": BLUE, "bg": "#d4e6f1"},
-    {"icon": f"{gap:+.3f} Dice", "title": "Segmentation: 90× cheaper",
-     "desc": f"LoRA (r=16) + head: {lh:.3f}\nvs. linear probing: {sl:.3f}\n93.8K vs. 8.45M trainable",
+    {"icon": "0.011-0.015", "title": "Segmentation margin, 3 tasks",
+     "desc": "Same gap on glioma, stroke and\nhippocampus despite differing in\nchannels, pathology and scale",
      "color": GREEN, "bg": "#eafaf1"},
-    {"icon": "66 params", "title": "The layer that matters",
-     "desc": f"Training the output projection\nadds +{gain:.2f} Dice over LoRA\nwith it frozen (r = 8, paired)",
+    {"icon": f"AUC {auc_p:.2f}, acc 0.50", "title": "Signal present, unusable",
+     "desc": "Frozen features rank sex far above\nchance, yet a 1K head gives a constant\ndecision — the bottleneck is geometry",
      "color": ORANGE, "bg": "#fef5e7"},
 ]
 for i, f in enumerate(findings):
