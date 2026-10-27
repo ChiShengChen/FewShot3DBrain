@@ -46,6 +46,9 @@ def main():
     ap.add_argument("--eval_batch_size", type=int, default=8)
     ap.add_argument("--lora_r", type=int, default=8)
     ap.add_argument("--patch_size", type=int, default=64)
+    ap.add_argument("--force", action="store_true",
+                    help="re-score even at the same overlap (e.g. after the cached split file "
+                         "was rebuilt: the test set, not the window setting, changed)")
     args = ap.parse_args()
 
     run_dir = Path(args.run_dir)
@@ -55,8 +58,8 @@ def main():
     results = json.loads(res_path.read_text())
 
     old = results.get("eval_protocol", {}).get("overlap")
-    if old is not None and abs(old - args.overlap) < 1e-9:
-        print(f"already scored at overlap={args.overlap}; nothing to do")
+    if old is not None and abs(old - args.overlap) < 1e-9 and not args.force:
+        print(f"already scored at overlap={args.overlap}; nothing to do (use --force to re-score anyway)")
         return
 
     # Backward-transfer entries need the post-sequence model state, which this script does
@@ -97,8 +100,11 @@ def main():
         if per_case is not None:
             (run_dir / f"task{task_id}_per_case.json").write_text(json.dumps(per_case, indent=2))
 
-        entry.setdefault("superseded_test", {})[f"overlap_{old}"] = entry.get("test")
+        same_overlap = old is not None and abs(old - args.overlap) < 1e-9
+        tag = f"overlap_{old}" if not same_overlap else f"overlap_{old}_n{entry.get('test', {}).get('n', '?')}"
+        entry.setdefault("superseded_test", {})[tag] = entry.get("test")
         entry["test"] = new
+        entry["n_test"] = len(splits["test"])
         print(f"  {key}: {new}  ({time.perf_counter() - t0:.0f}s)", flush=True)
 
         del model

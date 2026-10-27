@@ -68,6 +68,37 @@ TASK_CONFIGS = {
         "num_classes": 2,
         "modalities": 1,  # T1
     },
+    # WMH Segmentation Challenge 2017 (scripts/prepare_wmh_seg.py): white-matter
+    # hyperintensities on FLAIR+T1 from 170 subjects across five scanners at three sites.
+    # A fourth segmentation task with a different pathology and an explicit multi-site
+    # acquisition shift, which none of BraTS / ISLES / MSD provides.
+    8: {
+        "name": "Task008_WMH_SEG",
+        "task_type": "segmentation",
+        "num_classes": 2,
+        "modalities": 2,  # FLAIR, T1 (T1 registered to FLAIR by the challenge pipeline)
+    },
+    # OASIS-1 (scripts/prepare_oasis1.py): a second cohort and scanner for the global tasks,
+    # on the same 96^3 whole-head cubes as Tasks 5/6 but with a single T1 channel. Brain age
+    # and sex replicate Tasks 5/6 out of cohort; CDR>0 adds a clinical classification.
+    9: {
+        "name": "Task009_OASIS_AGE",
+        "task_type": "regression",
+        "num_classes": 1,
+        "modalities": 1,  # T1 (MPRAGE, N4-corrected native space)
+    },
+    10: {
+        "name": "Task010_OASIS_SEX",
+        "task_type": "classification",
+        "num_classes": 2,
+        "modalities": 1,  # T1
+    },
+    11: {
+        "name": "Task011_OASIS_CDR",
+        "task_type": "classification",
+        "num_classes": 2,
+        "modalities": 1,  # T1; label 1 = Clinical Dementia Rating > 0, subjects >= 60 y only
+    },
 }
 
 
