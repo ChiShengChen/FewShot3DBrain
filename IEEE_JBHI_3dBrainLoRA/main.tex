@@ -4,8 +4,6 @@
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{algorithmic}
 \usepackage{graphicx}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta,positioning}
 \usepackage{booktabs}
 \usepackage{algorithm,algorithmic}
 \usepackage{hyperref}
@@ -406,6 +404,15 @@ From $64^3$ patches, no method learns brain age: all ten configurations in Table
 
 Re-running the task with the whole head resampled to a single $96^3$ cube changes the picture entirely (Table~\ref{tab:age}). LoRA + head reaches MAE $10.99\pm1.27$\,yr with $R^2=0.31$, beating the constant predictor by 3.68\,yr per subject (paired, $p=3{\times}10^{-41}$) and full fine-tuning by 1.68\,yr ($p=3{\times}10^{-13}$; Table~\ref{tab:paired_global}). Sequential Linear and BitFit do \emph{not} recover: their predictions still have a standard deviation of about 0.1\,yr against a true 16.5, i.e.\ they remain constant.
 
+Figure~\ref{fig:age_scatter} shows what the numbers summarise: the linear probe's predictions sit in a 47--54\,yr band whatever the true age, while LoRA's follow it, on both cohorts.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_age_scatter.pdf}
+\caption{Predicted against true brain age on the held-out test sets, all five seeds pooled (1250 cases per cohort), LoRA + head ($r{=}16$) against the linear probe on the same frozen encoder. Whole-head $96^3$ input. The probe's output barely varies with the input (its spread is seed-to-seed, not case-to-case); LoRA's tracks age on IXI and OASIS-1 alike, with the compression towards the training mean expected at 32 labelled subjects.}
+\label{fig:age_scatter}
+\end{figure}
+
 This is the paper's clearest result and it runs opposite to segmentation. Brain age needs the \emph{encoder} representation to change---a 513-parameter head on frozen features cannot express it, and bias-only adaptation cannot either---while 56K well-placed low-rank parameters can, and do so better than releasing all 14M. Where segmentation already has a large task-specific decoder to train, regression has nothing comparable, and that is exactly where adapter capacity becomes necessary rather than merely economical.
 
 \begin{table}[t]
@@ -433,6 +440,15 @@ constant predictor    & 14.39 & 0.00 & 0 & 14.39 \\
 The two findings above each rested on a single task and a single cohort. Table~\ref{tab:all} and Fig.~\ref{fig:rule} add two segmentation tasks and four global tasks chosen to share as little as possible with the originals---a different pathology, a different site and scanner, a second cohort for both global tasks, and a clinical label---and both patterns hold.
 
 \textbf{Segmentation.} On hippocampus segmentation---one channel, healthy anatomy, a foreground two orders of magnitude larger than a lesion, and volumes that fit inside the inference window---linear probing again leads LoRA, by $0.011$ Dice (paired, 95\% CI $[0.010, 0.012]$, $p=2{\times}10^{-70}$). On white-matter hyperintensities, whose test set spans five scanners, the two are statistically indistinguishable ($+0.015$, $p_{\text{Holm}}=0.25$), as they are on stroke lesions ($-0.002$, $p_{\text{Holm}}=0.06$). Across the four segmentation tasks the margin is therefore $0.011$, $0.011$, $0.000$ and $0.015$ (Table~\ref{tab:paired}): never in LoRA's favour, never larger than 0.015 Dice, across tasks that differ in modality count, pathology, foreground fraction, input scope and acquisition. The property that predicts it is the one they share---an 8.45M-parameter decoder that is already task-shaped and can simply be trained. Full fine-tuning, which has no continual constraint on a single task, is the most accurate option on hippocampus ($+0.025$) and by a wide margin on WMH ($+0.108$), at the cost of a separate 86\,MB network per task.
+
+Figure~\ref{fig:qual} shows representative cases: on each task the two frozen-encoder strategies produce masks of similar quality, differing in detail rather than in kind, which is what a 0.011-Dice margin looks like.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_qualitative_seg.pdf}
+\caption{Qualitative segmentation on held-out test cases (seed-42 split), one per task, chosen as the case whose LoRA Dice is closest to that task's median rather than its best. Left: ground truth (red). Middle and right: LoRA + head ($r{=}16$) and the linear probe (decoder trained on the frozen encoder), with the ground-truth outline and the whole-volume per-case Dice. Slice through the largest ground-truth cross-section.}
+\label{fig:qual}
+\end{figure}
 
 \textbf{Global tasks.} On IXI sex classification, LoRA reaches AUC $0.878\pm0.079$ and per-case accuracy 0.06 above full fine-tuning's (McNemar $p=2{\times}10^{-4}$). Linear probing and BitFit again produce a \emph{constant} decision: balanced accuracy $0.500$ on every seed. Their AUCs, however, are 0.70 and 0.74---well above chance. This sharpens the mechanism: the frozen features do carry sex information, enough to rank subjects correctly most of the time, but a 1K-parameter head over pooled features cannot turn that ranking into a usable decision boundary. Moving the representation is what converts present-but-unusable signal into a working classifier.
 
@@ -507,7 +523,7 @@ Storage is where the strategies separate. A LoRA adapter with its output head oc
 Training time runs the other way, and we report it plainly because it is counter-intuitive. The two strategies that update the fewest parameters are the \emph{slowest} to train: BitFit 48.1 min and LoRA 41.5 min, against 15.8 for linear probing and 15.9 for full fine-tuning. Gradients must still be propagated through the entire network to reach parameters scattered across it, and LoRA's parallel low-rank branches add forward cost; only the optimiser state shrinks. Where linear probing back-propagates no further than the decoder, LoRA and BitFit must traverse the encoder as well. Parameter efficiency here buys storage and task isolation, not training speed---a distinction often elided when PEFT is described as ``cheap''. All four fit on one consumer GPU, peaking between 0.9 and 1.7\,GB, so hardware is not the discriminator at this scale.
 
 \begin{table}[t]
-\caption{Deployment cost, measured on the segmentation configuration (mean over seeds 42--44). ``Per task'' is what must be stored for each additional task once the shared backbone (87\,MB) is on disk; full fine-tuning shares nothing, so its backbone is counted per task.}
+\caption{Deployment cost, measured on the segmentation configuration. Storage is exact; training time is the mean over seeds 42--44, which ran on an otherwise idle GPU (seeds 45--46 shared the card with other jobs and are excluded from timing; their ordering is the same). ``Per task'' is what must be stored for each additional task once the shared backbone (87\,MB) is on disk; full fine-tuning shares nothing, so its backbone is counted per task.}
 \label{tab:cost}
 \centering
 \footnotesize
@@ -566,10 +582,6 @@ We report this plainly: with this checkpoint, at this shot count, transfer is re
 \label{fig:pretrain}
 \end{figure*}
 
-% Qualitative figures from the pre-audit runs are not reproduced: the segmentation
-% panels came from checkpoints trained on contaminated splits, and the brain-age
-% panels illustrated a model fitted to constant labels. Regenerate from
-% outputs/benchmark_v2/n32/lora_head_r16/seed42/task2/task2_best.pt before submission.
 
 
 \section{Discussion}
@@ -624,12 +636,15 @@ The choice is conditional on a property of the new task that can be checked befo
 
 Three cautions accompany these recommendations. Parameter efficiency buys storage and isolation, not training speed---the two methods with the fewest trainable parameters were the slowest to train. A pretrained checkpoint should be validated with a random-initialisation control rather than assumed to transfer; ours made no difference on the two tasks we started with and a small one elsewhere. And an evaluation protocol that scores random crops on the model-selection split can inflate results enough to reverse the ordering of methods, which is why we release ours along with the code, the splits and the per-case predictions.
 
+\section*{Code and Data Availability}
+The code, the persisted subject-grouped splits for every task and seed, the per-case predictions behind every table and figure, the table and statistics generators, and the protocol tests are available at \url{https://github.com/ChiShengChen/FewShot3DBrain}. The imaging data are obtained from their original sources under the terms listed in Sec.~\ref{sec:data}; no imaging data are redistributed.
+
 \bibliographystyle{IEEEtran}
 \bibliography{reference}
 
 
 
-\begin{IEEEbiography}[{\includegraphics[width=1.1in,height=1.25in,clip,keepaspectratio]{author/chisheng.png}}]{ Chi-Sheng Chen} received a bachelor degree in Electrophysics from National Chiao Tung University and a master's degree in Biomedical Electronics and Bioinformatics from National Taiwan University. He is currently working at a financial AI startup and also serves as an AI project researcher at Harvard Medical School and Beth Israel Deaconess Medical Center. His research expertise includes time-series analysis, computer vision, brain-computer interfaces (BCI), electroencephalography (EEG), multimodal contrastive learning, and quantum machine learning. Chen has led the development of foundational models for EEG-based image generation, aiming to improve psychiatric treatment and the discovery of biomarkers for drug development. He has designed hybrid quantum-classical architectures for EEG encoding and pioneered quantum deep learning methods for contrastive learning between EEG and visual data. His research also focuses on medical speech processing and the integration of multimodal large language models (LLMs) for clinical and financial application.
+\begin{IEEEbiography}[{\includegraphics[width=1.1in,height=1.25in,clip,keepaspectratio]{author/chisheng.jpg}}]{ Chi-Sheng Chen} received a bachelor degree in Electrophysics from National Chiao Tung University and a master's degree in Biomedical Electronics and Bioinformatics from National Taiwan University. He is currently working at a financial AI startup and also serves as an AI project researcher at Harvard Medical School and Beth Israel Deaconess Medical Center. His research expertise includes time-series analysis, computer vision, brain-computer interfaces (BCI), electroencephalography (EEG), multimodal contrastive learning, and quantum machine learning. Chen has led the development of foundational models for EEG-based image generation, aiming to improve psychiatric treatment and the discovery of biomarkers for drug development. He has designed hybrid quantum-classical architectures for EEG encoding and pioneered quantum deep learning methods for contrastive learning between EEG and visual data. His research also focuses on medical speech processing and the integration of multimodal large language models (LLMs) for clinical and financial application.
 \end{IEEEbiography}
 
 \begin{IEEEbiography}[{\includegraphics[width=0.9in,height=1.1in,clip,keepaspectratio]{author/Xinyu.jpg}}]{Xinyu Zhang} received the B.E. and the M.S. degree from the Information and Automatic College, Tianjin University of Science and Technology, Tianjin, China, in 2019 and 2022, separately, where he is currently pursuing the Ph.D. degree in intelligent system engineering with Luddy School of Informatics, Computing, and Engineering, Indiana University Bloomington, Bloomington, IN, USA.
