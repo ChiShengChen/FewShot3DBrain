@@ -60,7 +60,7 @@ Clinical model deployment \and Few-shot learning \and Continual learning \and Pa
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/teaser_gen_v2_fixed.png}
+\includegraphics[width=\textwidth]{figures/teaser_gen_v3_fixed.png}
 \caption{Overview. (a)~Nine brain-MRI tasks from six cohorts, each learned from 32 labelled volumes, grouped by whether the task inherits a large task-specific head (the U-Net decoder) or only a $\sim$1K-parameter head over pooled encoder features; one held-out test slice per task, segmentation targets in red. (b)~The four adaptation strategies compared, drawn as what each freezes (snowflake) and trains (flame) in the same frozen FOMO 3D U-Net: LoRA + head adds low-rank branches to every convolution and trains the output projection; linear probing trains everything downstream of the encoder; BitFit trains bias terms and the head; full fine-tuning trains all 22.6\,M parameters. The 66-parameter output projection is trained in every strategy; leaving it frozen is the single largest source of error we observed (Sec.~\ref{sec:res_head}). (c)~The decision rule the results support, $N_k=32$, mean $\pm$ SD over five seeds: with a large head, training it is at least as accurate as LoRA and BitFit collapses; with a small head, LoRA is the only frozen strategy that learns at all, while linear probing and BitFit return a constant output. Footer: the three further findings of the paper. Per-case paired tests for every contrast are in Tables~\ref{tab:paired} and~\ref{tab:paired_global}.}
 \label{fig:framework}
 \end{figure*}
