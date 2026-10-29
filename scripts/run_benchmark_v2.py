@@ -42,7 +42,7 @@ from src.replay_buffer import ReplayBuffer  # noqa: E402
 from src.train import compute_fisher_diagonal, train_task, train_task_cl  # noqa: E402
 
 METHODS = ["lora", "lora_head", "lora_encoder_only", "sequential_linear", "sequential_ft",
-           "ewc", "lwf", "replay", "bitfit", "pertask_lora"]
+           "ewc", "lwf", "replay", "bitfit", "pertask_lora", "adapter"]
 # Methods that carry one model through the task sequence (and can therefore forget).
 # The regularisation / distillation / replay baselines are full fine-tuning plus a
 # forgetting-mitigation term, so they belong here too.
@@ -62,7 +62,7 @@ def make_loaders(files_train, files_val, task_type, patch_size, batch_size):
     )
 
 
-def build_model(method, task_id, cfg, patch_size, pretrained, lora_r):
+def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_dim=16):
     """Every method starts from the same pretrained backbone; they differ in what is trainable.
 
     Trainable budgets differ by more than two orders of magnitude between these methods
@@ -72,6 +72,11 @@ def build_model(method, task_id, cfg, patch_size, pretrained, lora_r):
     if method in ("lora", "lora_head", "pertask_lora"):
         model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
                           model_name="unet_b", lora_r=lora_r, lora_decoder=True)
+    elif method == "adapter":
+        # Houlsby bottleneck adapters at a budget matched to LoRA r=16 (dim=16: 93.7K vs
+        # 93.8K on segmentation). Task-isolated like LoRA; output projection trained below.
+        model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
+                          model_name="unet_b", lora_r=0, lora_decoder=True, adapter_dim=adapter_dim)
     elif method == "lora_encoder_only":
         model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
                           model_name="unet_b", lora_r=lora_r, lora_decoder=False)
@@ -87,10 +92,10 @@ def build_model(method, task_id, cfg, patch_size, pretrained, lora_r):
         # (for segmentation that is the entire decoder).
         for n, p in model.named_parameters():
             p.requires_grad = "encoder" not in n
-    elif method == "lora_head":
+    elif method in ("lora_head", "adapter"):
         # Segmentation under plain LoRA leaves the output projection frozen at its
         # pretrained value, so the model can never re-map channels onto the new label
-        # space. Unfreezing it costs 66 parameters.
+        # space. Unfreezing it costs 66 parameters. The adapter comparator gets the same.
         for n, p in model.named_parameters():
             if "out_conv" in n:
                 p.requires_grad = True
@@ -118,11 +123,16 @@ def run(args):
     run_name = args.method
     if args.method.startswith("lora") and args.lora_r != 8:
         run_name = f"{args.method}_r{args.lora_r}"
+    if args.method == "adapter" and args.adapter_dim != 16:
+        run_name = f"adapter_d{args.adapter_dim}"
     task_tag = "" if list(args.tasks) == [2, 3] else "_t" + "".join(str(t) for t in args.tasks)
     # Free-form tag for controls that change something the name cannot express (e.g. a
     # randomly initialised backbone), so they never overwrite the main configuration.
     extra_tag = f"_{args.tag}" if args.tag else ""
-    out_dir = Path(args.save_dir) / f"n{args.n_shot}" / (run_name + task_tag + extra_tag) / f"seed{args.seed}"
+    # --full_train keeps the n-shot split's val/test and trains on every other subject:
+    # the "how far is 32-shot from the ceiling" reference, filed under nfull/.
+    n_tag = "full" if args.full_train else str(args.n_shot)
+    out_dir = Path(args.save_dir) / f"n{n_tag}" / (run_name + task_tag + extra_tag) / f"seed{args.seed}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     results = {"method": args.method, "seed": args.seed, "n_shot": args.n_shot,
@@ -146,6 +156,19 @@ def run(args):
         splits = load_or_make_splits(args.data_dir, task_id, args.n_shot, seed=args.seed,
                                      split_dir=args.split_dir,
                                      max_test_subjects=args.max_test_subjects)
+        if args.full_train:
+            # Same held-out val/test as the few-shot run of this seed (so the number is
+            # directly comparable); train = every usable case that is in neither.
+            from src.data import list_case_files
+            # Split files may hold relative paths (older seeds) or absolute ones; match on
+            # the case name, which is unique within a task.
+            held = {os.path.basename(f) for f in splits["val"]} | {os.path.basename(f) for f in splits["test"]}
+            splits = dict(splits)
+            splits["train"] = [f for f in list_case_files(args.data_dir, task_id)
+                               if os.path.basename(f) not in held]
+            if not splits["train"]:
+                raise SystemExit(f"task {task_id}: no cases outside the n{args.n_shot} val/test split; "
+                                 "the few-shot protocol already uses every other subject")
         print(f"\n=== [{args.method}] task {task_id} ({cfg['task_type']}) "
               f"train={len(splits['train'])} val={len(splits['val'])} test={len(splits['test'])} ===",
               flush=True)
@@ -155,7 +178,8 @@ def run(args):
 
         # sequential_* carry the backbone forward through the sequence (that is what makes
         # them forget); the isolated methods rebuild from the pretrained checkpoint.
-        model = build_model(args.method, task_id, cfg, patch_size, args.pretrained_path, args.lora_r)
+        model = build_model(args.method, task_id, cfg, patch_size, args.pretrained_path, args.lora_r,
+                            adapter_dim=args.adapter_dim)
         if args.method in SEQUENTIAL and shared_model is not None:
             model.load_state_dict(_carry_backbone(shared_model, model), strict=False)
 
@@ -308,6 +332,11 @@ def main():
     ap.add_argument("--overlap", type=float, default=0.5)
     ap.add_argument("--max_test_subjects", type=int, default=250)
     ap.add_argument("--tag", default="", help="suffix for the run directory (controls/ablations)")
+    ap.add_argument("--adapter_dim", type=int, default=16,
+                    help="bottleneck width for --method adapter (16 matches LoRA r=16's budget)")
+    ap.add_argument("--full_train", action="store_true",
+                    help="train on every subject outside the n-shot split's val/test (ceiling reference; "
+                         "results go under nfull/)")
     # Forgetting-mitigation baselines (defaults follow the original run_continual_*.py).
     ap.add_argument("--lambda_ewc", type=float, default=1000.0)
     ap.add_argument("--distill_weight", type=float, default=0.5,

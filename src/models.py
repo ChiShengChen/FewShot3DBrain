@@ -54,6 +54,8 @@ class TaskModel(nn.Module):
         lora_alpha: float = 16.0,
         lora_dropout: float = 0.1,
         lora_decoder: bool = True,
+        adapter_dim: int = 0,
+        adapter_dropout: float = 0.1,
     ):
         super().__init__()
         self.task_id = task_id
@@ -86,6 +88,18 @@ class TaskModel(nn.Module):
                 _inject_lora(self.backbone.encoder, lora_r, lora_alpha, lora_dropout)
             if lora_decoder and hasattr(self.backbone, "decoder") and self.backbone.decoder is not None and not isinstance(self.backbone.decoder, nn.Identity):
                 _inject_lora(self.backbone.decoder, lora_r, lora_alpha, lora_dropout)
+
+        # Houlsby-style serial bottleneck adapters: the second PEFT comparator, attached
+        # after the same convolutions LoRA attaches to (src/adapter.py).
+        if adapter_dim and adapter_dim > 0:
+            try:
+                from src.adapter import inject_adapters
+            except ImportError:
+                from adapter import inject_adapters
+            if hasattr(self.backbone, "encoder"):
+                inject_adapters(self.backbone.encoder, adapter_dim, adapter_dropout)
+            if lora_decoder and hasattr(self.backbone, "decoder") and self.backbone.decoder is not None and not isinstance(self.backbone.decoder, nn.Identity):
+                inject_adapters(self.backbone.decoder, adapter_dim, adapter_dropout)
 
         # Head is always trainable
         if self.head is not None:
