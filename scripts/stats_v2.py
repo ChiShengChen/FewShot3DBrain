@@ -102,7 +102,7 @@ def holm(ps):
     return adj
 
 
-L16, L8, L8NH, SL, FT, BF, RI = "lora_head_r16", "lora_head", "lora", "sequential_linear", "sequential_ft", "bitfit", "lora_head_r16_randinit"
+L16, L8, L8NH, SL, FT, BF, RI, AD = "lora_head_r16", "lora_head", "lora", "sequential_linear", "sequential_ft", "bitfit", "lora_head_r16_randinit", "adapter"
 FAMILIES = {
     "seg": [  # Dice, A - B
         ("BraTS: L+h$_{16}$ $-$ SL", "dice", L16, SL, 2),
@@ -119,6 +119,10 @@ FAMILIES = {
         ("WMH: SL $-$ L+h$_{16}$", "dice", SL + "_t8", L16 + "_t8", 8),
         ("WMH: FT $-$ L+h$_{16}$", "dice", FT + "_t8", L16 + "_t8", 8),
         ("WMH: L+h$_{16}$ $-$ RI", "dice", L16 + "_t8", RI.replace("_randinit", "_t8_randinit"), 8),
+        ("BraTS: L+h$_{16}$ $-$ AD", "dice", L16, AD, 2),
+        ("ISLES: L+h$_{16}$ $-$ AD", "dice", L16 + "_t4", AD + "_t4", 4),
+        ("Hippocampus: L+h$_{16}$ $-$ AD", "dice", L16 + "_t7", AD + "_t7", 7),
+        ("WMH: L+h$_{16}$ $-$ AD", "dice", L16 + "_t8", AD + "_t8", 8),
     ],
     "age": [  # |error| in years, A - B
         ("IXI: L+h$_{16}$ $-$ constant", "const", L16 + "_t5", "const", 5),
@@ -127,6 +131,8 @@ FAMILIES = {
         ("OASIS: L+h$_{16}$ $-$ constant", "const", L16 + "_t9", "const", 9),
         ("OASIS: L+h$_{16}$ $-$ FT", "abserr", L16 + "_t9", FT + "_t9", 9),
         ("OASIS: L+h$_{16}$ $-$ RI", "abserr", L16 + "_t9", RI.replace("_randinit", "_t9_randinit"), 9),
+        ("IXI: L+h$_{16}$ $-$ AD", "abserr", L16 + "_t5", AD + "_t5", 5),
+        ("OASIS: L+h$_{16}$ $-$ AD", "abserr", L16 + "_t9", AD + "_t9", 9),
     ],
     "cls": [  # accuracy, McNemar
         ("IXI sex: L+h$_{16}$ vs FT", "mcnemar", L16 + "_t6", FT + "_t6", 6),
@@ -134,6 +140,8 @@ FAMILIES = {
         ("OASIS sex: L+h$_{16}$ vs FT", "mcnemar", L16 + "_t10", FT + "_t10", 10),
         ("OASIS sex: L+h$_{16}$ vs RI", "mcnemar", L16 + "_t10", RI.replace("_randinit", "_t10_randinit"), 10),
         ("OASIS CDR: L+h$_{16}$ vs FT", "mcnemar", L16 + "_t11", FT + "_t11", 11),
+        ("IXI sex: L+h$_{16}$ vs AD", "mcnemar", L16 + "_t6", AD + "_t6", 6),
+        ("OASIS sex: L+h$_{16}$ vs AD", "mcnemar", L16 + "_t10", AD + "_t10", 10),
     ],
 }
 # Forgetting (post-sequence) scores are stored only as per-seed aggregates, not per case,

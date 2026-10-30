@@ -273,7 +273,7 @@ ft_b, _ = ms("sequential_ft_t243", 2, "dice"); ft_b2, _ = ms("sequential_ft_t243
 ft_i, _ = ms("sequential_ft_t342", 4, "dice"); ft_i2, _ = ms("sequential_ft_t342", 4, "dice", "test_after_task2")
 stats = json.load(open(os.path.join(ROOT, "results", "stats_v2.json")))
 ri = {r["label"].split(":")[0]: r["mean"] for r in stats["seg"] if "RI" in r["label"]}
-nruns = len([f for n in ("n16", "n32", "n64") for f in glob.glob(os.path.join(ROOT, "outputs", "benchmark_v2", n, "*", "seed*", "results.json")) if "smoke" not in f])
+nruns = len([f for n in ("n16", "n32", "n64", "nfull") for f in glob.glob(os.path.join(ROOT, "outputs", "benchmark_v2", n, "*", "seed*", "results.json")) if "smoke" not in f])
 sgn = lambda v: f"{v:+.3f}".replace("-", "−")
 take = [(ORANGE, "Forgetting is symmetric:", f"a second segmentation task erases the first in either order\n(BraTS {ft_b:.2f}→{ft_b2:.2f}, ISLES {ft_i:.2f}→{ft_i2:.2f}); frozen strategies cannot forget."),
         (BLUE, "Pretraining is task-dependent:", f"ΔDice {sgn(ri['BraTS'])} BraTS, {sgn(ri['ISLES'])} ISLES,\n{sgn(ri['WMH'])} WMH vs random init; run a random-init control."),
