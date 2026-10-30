@@ -37,6 +37,11 @@ sys.path.insert(0, str(ROOT / "fomo_baseline" / "src"))
 from src.data import TASK_CONFIGS, FewShotFOMODataset, _seg_collate  # noqa: E402
 from src.eval import evaluate_split  # noqa: E402
 from src.models import TaskModel  # noqa: E402
+from src.swin_model import SwinTaskModel  # noqa: E402
+
+BACKBONES = {"unet_b": TaskModel, "swinunetr": SwinTaskModel}
+DEFAULT_WEIGHTS = {"unet_b": str(ROOT / "weights/fomo25_mmunetvae_pretrained.ckpt"),
+                   "swinunetr": str(ROOT / "weights/model_swinvit.pt")}
 from src.splits import load_or_make_splits  # noqa: E402
 from src.replay_buffer import ReplayBuffer  # noqa: E402
 from src.train import compute_fisher_diagonal, train_task, train_task_cl  # noqa: E402
@@ -62,27 +67,28 @@ def make_loaders(files_train, files_val, task_type, patch_size, batch_size):
     )
 
 
-def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_dim=16):
+def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_dim=16, backbone="unet_b"):
     """Every method starts from the same pretrained backbone; they differ in what is trainable.
 
     Trainable budgets differ by more than two orders of magnitude between these methods
     (LoRA ~47k on segmentation vs. Sequential Linear's whole decoder at ~8.4M), so the
     parameter counts are reported alongside every result rather than left implicit.
     """
+    Model = BACKBONES[backbone]
     if method in ("lora", "lora_head", "pertask_lora"):
-        model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
-                          model_name="unet_b", lora_r=lora_r, lora_decoder=True)
+        model = Model(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
+                          model_name=backbone, lora_r=lora_r, lora_decoder=True)
     elif method == "adapter":
         # Houlsby bottleneck adapters at a budget matched to LoRA r=16 (dim=16: 93.7K vs
         # 93.8K on segmentation). Task-isolated like LoRA; output projection trained below.
-        model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
-                          model_name="unet_b", lora_r=0, lora_decoder=True, adapter_dim=adapter_dim)
+        model = Model(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
+                          model_name=backbone, lora_r=0, lora_decoder=True, adapter_dim=adapter_dim)
     elif method == "lora_encoder_only":
-        model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
-                          model_name="unet_b", lora_r=lora_r, lora_decoder=False)
+        model = Model(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
+                          model_name=backbone, lora_r=lora_r, lora_decoder=False)
     else:
-        model = TaskModel(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
-                          model_name="unet_b", lora_r=0, lora_decoder=False)
+        model = Model(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
+                          model_name=backbone, lora_r=0, lora_decoder=False)
 
     if method in ("sequential_ft",) + CL_METHODS:
         for p in model.parameters():
@@ -125,6 +131,9 @@ def run(args):
         run_name = f"{args.method}_r{args.lora_r}"
     if args.method == "adapter" and args.adapter_dim != 16:
         run_name = f"adapter_d{args.adapter_dim}"
+    # A second backbone files its runs under a prefix so the U-Net tables never pick them up.
+    if args.backbone != "unet_b":
+        run_name = {"swinunetr": "swin"}[args.backbone] + "_" + run_name
     task_tag = "" if list(args.tasks) == [2, 3] else "_t" + "".join(str(t) for t in args.tasks)
     # Free-form tag for controls that change something the name cannot express (e.g. a
     # randomly initialised backbone), so they never overwrite the main configuration.
@@ -179,7 +188,7 @@ def run(args):
         # sequential_* carry the backbone forward through the sequence (that is what makes
         # them forget); the isolated methods rebuild from the pretrained checkpoint.
         model = build_model(args.method, task_id, cfg, patch_size, args.pretrained_path, args.lora_r,
-                            adapter_dim=args.adapter_dim)
+                            adapter_dim=args.adapter_dim, backbone=args.backbone)
         if args.method in SEQUENTIAL and shared_model is not None:
             model.load_state_dict(_carry_backbone(shared_model, model), strict=False)
 
@@ -266,7 +275,7 @@ def run(args):
                                               split_dir=args.split_dir,
                                               max_test_subjects=args.max_test_subjects)
                 prev_model = build_model(args.method, prev, pcfg, patch_size,
-                                         args.pretrained_path, args.lora_r)
+                                         args.pretrained_path, args.lora_r, backbone=args.backbone)
                 # Restore task `prev` exactly as it was left, then overwrite only the
                 # shared encoder with its current (post-task-`task_id`) state. That is
                 # what forgetting means here: the decoder/head of the old task is intact,
@@ -320,7 +329,11 @@ def main():
     ap.add_argument("--data_dir", default=str(ROOT / "data/preprocessed"))
     ap.add_argument("--split_dir", default=str(ROOT / "data/splits_v3"))
     ap.add_argument("--save_dir", default=str(ROOT / "outputs/benchmark_v2"))
-    ap.add_argument("--pretrained_path", default=str(ROOT / "weights/fomo25_mmunetvae_pretrained.ckpt"))
+    ap.add_argument("--backbone", default="unet_b", choices=list(BACKBONES),
+                    help="unet_b: FOMO 3D U-Net (main study); swinunetr: MONAI Swin UNETR with the "
+                         "self-supervised encoder of Tang et al. (backbone-independence check)")
+    ap.add_argument("--pretrained_path", default=None,
+                    help="checkpoint for the backbone (default: the backbone's own); '' = random init")
     ap.add_argument("--n_shot", type=int, default=32)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--epochs", type=int, default=100)
@@ -343,6 +356,8 @@ def main():
                     help="LwF feature-distillation weight; also used as the replay weight")
     ap.add_argument("--replay_capacity", type=int, default=100)
     args = ap.parse_args()
+    if args.pretrained_path is None:
+        args.pretrained_path = DEFAULT_WEIGHTS[args.backbone]
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)

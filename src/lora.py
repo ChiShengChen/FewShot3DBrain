@@ -115,3 +115,38 @@ def load_lora_state_dict(model: nn.Module, state_dict: dict, adapter_name: str =
             loaded += 1
     model.load_state_dict(model_dict, strict=False)
     return loaded
+
+
+# ---------------------------------------------------------------------------------------
+# LoRA for nn.Linear, for transformer backbones (Swin UNETR's qkv / proj / MLP layers).
+# Same parametrisation as Conv3dLoRA: W' = W + (alpha/r) B A, A Kaiming, B zero.
+# ---------------------------------------------------------------------------------------
+class LinearLoRA(nn.Module):
+    def __init__(self, base: nn.Linear, r: int = 8, lora_alpha: float = 16.0, lora_dropout: float = 0.0):
+        super().__init__()
+        self.base = base
+        self.r = r
+        self.scaling = lora_alpha / r
+        self.lora_A = nn.Linear(base.in_features, r, bias=False)
+        self.lora_B = nn.Linear(r, base.out_features, bias=False)
+        self.lora_dropout = nn.Dropout(p=lora_dropout) if lora_dropout > 0 else nn.Identity()
+        nn.init.kaiming_uniform_(self.lora_A.weight, a=math.sqrt(5))
+        nn.init.zeros_(self.lora_B.weight)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.base(x) + self.scaling * self.lora_B(self.lora_A(self.lora_dropout(x)))
+
+
+def _replace_linear_with_lora(module: nn.Module, name: str, r: int, lora_alpha: float, lora_dropout: float) -> int:
+    """Recursively wrap every nn.Linear with LinearLoRA. Returns count replaced."""
+    replaced = 0
+    for child_name, child in list(module.named_children()):
+        full_name = f"{name}.{child_name}" if name else child_name
+        if isinstance(child, nn.Linear):
+            setattr(module, child_name, LinearLoRA(child, r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout))
+            replaced += 1
+        elif isinstance(child, (LinearLoRA, Conv3dLoRA)):
+            continue
+        else:
+            replaced += _replace_linear_with_lora(child, full_name, r, lora_alpha, lora_dropout)
+    return replaced
