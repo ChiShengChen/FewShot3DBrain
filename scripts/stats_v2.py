@@ -143,6 +143,15 @@ FAMILIES = {
         ("IXI sex: L+h$_{16}$ vs AD", "mcnemar", L16 + "_t6", AD + "_t6", 6),
         ("OASIS sex: L+h$_{16}$ vs AD", "mcnemar", L16 + "_t10", AD + "_t10", 10),
     ],
+    "swin": [  # second backbone (Swin UNETR), seeds 42-44 only
+        ("BraTS (Swin): L+h$_{16}$ $-$ SL", "dice", "swin_" + L16 + "_t2", "swin_" + SL + "_t2", 2),
+        ("BraTS (Swin): FT $-$ L+h$_{16}$", "dice", "swin_" + FT + "_t2", "swin_" + L16 + "_t2", 2),
+        ("BraTS (Swin): L+h$_{16}$ $-$ BF", "dice", "swin_" + L16 + "_t2", "swin_" + BF + "_t2", 2),
+        ("IXI age (Swin): L+h$_{16}$ $-$ constant", "const", "swin_" + L16 + "_t5", "const", 5),
+        ("IXI sex (Swin): L+h$_{16}$ vs SL", "mcnemar", "swin_" + L16 + "_t6", "swin_" + SL + "_t6", 6),
+        ("IXI sex (Swin): L+h$_{16}$ vs FT", "mcnemar", "swin_" + L16 + "_t6", "swin_" + FT + "_t6", 6),
+        ("IXI sex (Swin): L+h$_{16}$ vs BF", "mcnemar", "swin_" + L16 + "_t6", "swin_" + BF + "_t6", 6),
+    ],
 }
 # Forgetting (post-sequence) scores are stored only as per-seed aggregates, not per case,
 # so BWT contrasts between EWC / LwF / replay and plain fine-tuning are reported as
@@ -171,7 +180,7 @@ def main():
     for fam, rows in FAMILIES.items():
         res = []
         for label, kind, a, b, task in rows:
-            d, nb, nc, used = paired_values(kind, a, b, task)
+            d, nb, nc, used = paired_values(kind, a, b, task, seeds=(42, 43, 44) if fam == "swin" else SEEDS)
             s = summarise(kind, d, nb, nc)
             if s is None:
                 print(f"  [{fam}] {label}: no data", flush=True)
@@ -184,7 +193,7 @@ def main():
             print(f"  [{fam}] {r['label']:34s} Δ={r['mean']:+.4f} CI=[{r['ci'][0]:+.4f},{r['ci'][1]:+.4f}] p={r['p']:.2e} holm={r['p_holm']:.2e} n={r['n']} seeds={r['seeds']}", flush=True)
         out[fam] = res
 
-        unit = {"seg": "$\\Delta$Dice", "age": "$\\Delta|$err$|$ (yr)", "cls": "$\\Delta$acc", "forget": "$\\Delta$Dice after T2"}[fam]
+        unit = {"seg": "$\\Delta$Dice", "age": "$\\Delta|$err$|$ (yr)", "cls": "$\\Delta$acc", "forget": "$\\Delta$Dice after T2", "swin": "$\\Delta$"}[fam]
         lines = []
         for r in res:
             ci = f"$[{r['ci'][0]:+.3f},\\,{r['ci'][1]:+.3f}]$"

@@ -18,16 +18,18 @@ OUT = ROOT / "outputs" / "benchmark_v2"
 TAB = ROOT / "IEEE_JBHI_3dBrainLoRA" / "tables"
 
 
-def runs(n, cfg):
+def runs(n, cfg, seeds=None):
     rs = []
     for f in sorted(glob.glob(str(OUT / n / cfg / "seed*" / "results.json"))):
+        if seeds is not None and int(Path(f).parent.name[4:]) not in seeds:
+            continue
         rs.append(json.load(open(f)))
     return rs
 
 
-def vals(n, cfg, task, metric, stage="test"):
+def vals(n, cfg, task, metric, stage="test", seeds=None):
     v = []
-    for r in runs(n, cfg):
+    for r in runs(n, cfg, seeds):
         e = r["per_task"].get(f"task{task}", {})
         if stage in e and metric in e[stage] and e[stage][metric] is not None and np.isfinite(e[stage][metric]):
             v.append(float(e[stage][metric]))
@@ -180,6 +182,54 @@ def main():
             cells.append(fcell(cfull[k], task, metric, d) if cfull[k] else "---")
         L.append(f"{name:20s} & {typ} & {ntr} & " + " & ".join(cells) + " \\\\")
     (TAB / "full_body.tex").write_text("\n".join(L) + "\n")
+
+    # ---- tab:swin (second backbone: Swin UNETR, seeds 42-44 on both backbones) ------
+    SW = (42, 43, 44)
+    def scell(c, task, metric, d, const_key, best):
+        v = vals("n32", c, task, metric, seeds=SW)
+        if v.size == 0:
+            return "---"
+        if const_key is not None:
+            cv = vals("n32", c, task, const_key, seeds=SW)
+            if cv.size and ((const_key == "pred_std" and cv.mean() < 0.5) or (const_key == "balanced_acc" and abs(cv.mean() - 0.5) < 0.02)):
+                return f"{v.mean():.{d}f} (const.)"
+        return ms(v, d, best)
+    cols = (  # (task, metric, decimals, const marker, higher-is-better, unet suffix, swin suffix)
+        (2, "dice", 3, None, True, "", "_t2"),
+        (5, "mae", 2, "pred_std", False, "_t5", "_t5"),
+        (6, "auc", 3, "balanced_acc", True, "_t6", "_t6"))
+    strategies = (("LoRA + head ($r{=}16$)", "lora_head_r16"), ("Sequential Linear", "sequential_linear"),
+                  ("Sequential FT", "sequential_ft"), ("BitFit", "bitfit"))
+    best = {}
+    for task, metric, d, ck, hi, su, ss in cols:
+        for bb, suf in (("", su), ("swin_", ss)):
+            means = {c: vals("n32", f"{bb}{c}{suf}", task, metric, seeds=SW).mean()
+                     for _, c in strategies if vals("n32", f"{bb}{c}{suf}", task, metric, seeds=SW).size}
+            if means:
+                best[(task, bb)] = (max if hi else min)(means, key=means.get)
+    L = []
+    for lab, c in strategies:
+        cells = []
+        for task, metric, d, ck, hi, su, ss in cols:
+            for bb, suf in (("", su), ("swin_", ss)):
+                cells.append(scell(f"{bb}{c}{suf}", task, metric, d, ck, best.get((task, bb)) == c))
+        L.append(f"{lab:24s} & " + " & ".join(cells) + " \\\\")
+    tr = []
+    for task, metric, d, ck, hi, su, ss in cols:
+        for bb, suf in (("", su), ("swin_", ss)):
+            cells_t = [trainable("n32", f"{bb}{c}{suf}", task) for _, c in strategies]
+            tr.append(cells_t)
+    (TAB / "swin_body.tex").write_text("\n".join(L) + "\n")
+    # trainable-parameter line: LoRA / probe / FT / BitFit per backbone, segmentation and whole-head
+    def k(x):
+        return "---" if x is None else (f"{x/1e6:.1f}M" if x >= 1e6 else f"{x/1e3:.1f}K")
+    seg_u = [trainable("n32", c, 2) for _, c in strategies]
+    seg_s = [trainable("n32", f"swin_{c}_t2", 2) for _, c in strategies]
+    glb_u = [trainable("n32", f"{c}_t5", 5) for _, c in strategies]
+    glb_s = [trainable("n32", f"swin_{c}_t5", 5) for _, c in strategies]
+    (TAB / "swin_params.tex").write_text(
+        "Trainable, segmentation & " + " & ".join(f"{k(a)} / {k(b)}" for a, b in zip(seg_u, seg_s)) + " \\\\\n"
+        "Trainable, whole head & " + " & ".join(f"{k(a)} / {k(b)}" for a, b in zip(glb_u, glb_s)) + " \\\\\n")
 
     n_runs = len(glob.glob(str(OUT / "n*" / "*" / "seed*" / "results.json")))
     (TAB / "counts.tex").write_text(f"\\newcommand{{\\nruns}}{{{n_runs}}}\n")

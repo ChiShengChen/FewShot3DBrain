@@ -112,6 +112,10 @@ def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_di
         # of the backbone per task, so BWT is zero by construction.
         for n, p in model.named_parameters():
             p.requires_grad = n.endswith(".bias") or "out_conv" in n or n.startswith("head")
+        if isinstance(model, SwinTaskModel):
+            # bias-only LayerNorm trips a fused-kernel bug at 96^3 inputs; see swin_model.py
+            from src.swin_model import decompose_layernorms
+            decompose_layernorms(model)
     return model
 
 

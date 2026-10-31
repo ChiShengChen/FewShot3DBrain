@@ -18,6 +18,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 _root = Path(__file__).resolve().parent.parent
 for _p in (_root / "fomo_baseline", _root / "fomo_baseline" / "src"):   # FOMO's `models` package
@@ -155,3 +156,28 @@ class SwinTaskModel(nn.Module):
         if self.task_type == "segmentation":
             return self.backbone(x)
         return self.head(self.backbone(x))
+
+
+class _DecomposedLayerNorm(nn.LayerNorm):
+    """nn.LayerNorm with the affine applied as separate elementwise ops.
+
+    PyTorch's fused layer-norm backward (torch 2.9, CUDA) returns an empty bias gradient
+    when only the bias requires grad and the token count is large (96^3 inputs; 64^3 is
+    fine), which breaks BitFit on the Swin encoder. The forward is bit-identical."""
+
+    def forward(self, x):
+        return F.layer_norm(x, self.normalized_shape, None, None, self.eps) * self.weight + self.bias
+
+
+def decompose_layernorms(module: nn.Module) -> int:
+    """Swap every nn.LayerNorm under `module` for _DecomposedLayerNorm, keeping its parameters."""
+    n = 0
+    for name, ch in module.named_children():
+        if type(ch) is nn.LayerNorm:
+            new = _DecomposedLayerNorm(ch.normalized_shape, ch.eps, ch.elementwise_affine)
+            new.weight, new.bias = ch.weight, ch.bias
+            setattr(module, name, new)
+            n += 1
+        else:
+            n += decompose_layernorms(ch)
+    return n
