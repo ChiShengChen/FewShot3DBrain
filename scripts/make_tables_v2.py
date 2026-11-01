@@ -38,13 +38,13 @@ def vals(n, cfg, task, metric, stage="test", seeds=None):
 
 def ms(v, d=3, bold=False):
     if v.size == 0:
-        return "---"
+        return "n/a"
     s = f"{v.mean():.{d}f}\\pm{v.std(ddof=1) if v.size > 1 else 0:.{d}f}"
     return f"$\\mathbf{{{s}}}$" if bold else f"${s}$"
 
 
 def m(v, d=2):
-    return "---" if v.size == 0 else f"{v.mean():.{d}f}"
+    return "n/a" if v.size == 0 else f"{v.mean():.{d}f}"
 
 
 def trainable(n, cfg, task):
@@ -103,7 +103,7 @@ def main():
     def cell(c, task, metric, d, best=False, const_key=None):
         v = vals("n32", c, task, metric)
         if v.size == 0:
-            return "---"
+            return "n/a"
         if const_key is not None:
             cv = vals("n32", c, task, const_key)
             if cv.size and ((const_key == "pred_std" and cv.mean() < 0.5) or (const_key == "balanced_acc" and abs(cv.mean() - 0.5) < 0.02)):
@@ -168,7 +168,7 @@ def main():
     # ---- tab:full (full-data reference, seed 42) ---------------------------------
     def fcell(c, task, metric, d):
         v = vals("nfull", c, task, metric)
-        return "---" if v.size == 0 else f"{v.mean():.{d}f}"
+        return "n/a" if v.size == 0 else f"{v.mean():.{d}f}"
     L = []
     for name, typ, task, metric, d, ntr, c32, cfull in (
             ("T1 BraTS glioma", "Dice$\\uparrow$", 2, "dice", 3, 908, {"L": "lora_head_r16", "SL": "sequential_linear", "FT": "sequential_ft"}, {"L": "lora_head_r16_t2", "SL": "sequential_linear_t2", "FT": "sequential_ft_t2"}),
@@ -179,7 +179,7 @@ def main():
         cells = []
         for k in ("L", "SL", "FT"):
             cells.append(ms(vals("n32", c32[k], task, metric), d))
-            cells.append(fcell(cfull[k], task, metric, d) if cfull[k] else "---")
+            cells.append(fcell(cfull[k], task, metric, d) if cfull[k] else "n/a")
         L.append(f"{name:20s} & {typ} & {ntr} & " + " & ".join(cells) + " \\\\")
     (TAB / "full_body.tex").write_text("\n".join(L) + "\n")
 
@@ -188,7 +188,7 @@ def main():
     def scell(c, task, metric, d, const_key, best):
         v = vals("n32", c, task, metric, seeds=SW)
         if v.size == 0:
-            return "---"
+            return "n/a"
         if const_key is not None:
             cv = vals("n32", c, task, const_key, seeds=SW)
             if cv.size and ((const_key == "pred_std" and cv.mean() < 0.5) or (const_key == "balanced_acc" and abs(cv.mean() - 0.5) < 0.02)):
@@ -222,7 +222,7 @@ def main():
     (TAB / "swin_body.tex").write_text("\n".join(L) + "\n")
     # trainable-parameter line: LoRA / probe / FT / BitFit per backbone, segmentation and whole-head
     def k(x):
-        return "---" if x is None else (f"{x/1e6:.1f}M" if x >= 1e6 else f"{x/1e3:.1f}K")
+        return "n/a" if x is None else (f"{x/1e6:.1f}M" if x >= 1e6 else f"{x/1e3:.1f}K")
     seg_u = [trainable("n32", c, 2) for _, c in strategies]
     seg_s = [trainable("n32", f"swin_{c}_t2", 2) for _, c in strategies]
     glb_u = [trainable("n32", f"{c}_t5", 5) for _, c in strategies]

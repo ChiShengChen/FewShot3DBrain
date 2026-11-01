@@ -1,173 +1,194 @@
-% MICCAI 2026 - Few-Shot Continual Learning for 3D Brain MRI
-% Add/verify DOIs and full citations as needed.
+% FewShot3DBrain: Which Adaptation Strategy for a New Task? (IEEE JBHI submission / arXiv preprint)
 
 @misc{fomo2025,
   title={{FOMO-60K}: Foundation Models for Open Medical Imaging},
-  author={FOMO Challenge Organizers},
+  author={{FOMO Challenge Organizers}},
   year={2025},
-  note={FOMO25 Challenge, HuggingFace: FOMO25/FOMO-MRI}
+  note={{FOMO25} Challenge, {HuggingFace}: {FOMO25/FOMO-MRI}}
 }
 
-@article{hu2022lora,
-  title={LoRA: Low-Rank Adaptation of Large Language Models},
-  author={Hu, Edward J and Shen, Yelong and Wallis, Phillip and Allen-Zhu, Zeyuan and Li, Yuanzhi and Wang, Shean and Wang, Lu and Chen, Wang},
-  journal={ICLR},
+@inproceedings{hu2022lora,
+  title={{LoRA}: Low-Rank Adaptation of Large Language Models},
+  author={Hu, Edward J and Shen, Yelong and Wallis, Phillip and others},
+  booktitle={Proc. ICLR},
   year={2022}
 }
 
 @article{kirkpatrick2017,
   title={Overcoming catastrophic forgetting in neural networks},
-  author={Kirkpatrick, James and Pascanu, Razvan and Rabinowitz, Neil and Veness, Joel and Desjardins, Guillaume and Rusu, Andrei A and Milan, Kieran and Quan, John and Ramalho, Tiago and Grabska-Barwinska, Agnieszka and others},
-  journal={PNAS},
+  author={Kirkpatrick, James and Pascanu, Razvan and Rabinowitz, Neil and others},
+  journal={Proc. Natl. Acad. Sci. USA},
   volume={114},
   number={13},
   pages={3521--3526},
   year={2017}
 }
 
-@inproceedings{li2017lwf,
+@article{li2017lwf,
   title={Learning without Forgetting},
   author={Li, Zhizhong and Hoiem, Derek},
-  booktitle={ECCV},
-  year={2016}
+  journal={IEEE Trans. Pattern Anal. Mach. Intell.},
+  volume={40},
+  number={12},
+  pages={2935--2947},
+  year={2018}
 }
 
 @article{mccloskey1989catastrophic,
   title={Catastrophic forgetting in connectionist networks: The sequential learning problem},
   author={McCloskey, Michael and Cohen, Neal J},
-  journal={Psychology of learning and motivation},
+  journal={Psychol. Learn. Motiv.},
   volume={24},
   pages={109--165},
   year={1989}
 }
 
-@article{houlsby2019,
-  title={Parameter-Efficient Transfer Learning for NLP},
-  author={Houlsby, Neil and Giurgiu, Andrei and Jastrzebski, Stanislaw and Morrone, Bruna and de Laroussilhe, Quentin and Gesmundo, Andrea and Attariyan, Mona and Gelly, Sylvain},
-  journal={ICML},
+@inproceedings{houlsby2019,
+  title={Parameter-Efficient Transfer Learning for {NLP}},
+  author={Houlsby, Neil and Giurgiu, Andrei and Jastrzebski, Stanislaw and others},
+  booktitle={Proc. ICML},
+  pages={2790--2799},
   year={2019}
 }
 
-@inproceedings{brats2023,
-  title={The {BraTS} 2023 Challenge},
-  author={Menze, Bjoern and others},
-  booktitle={MICCAI BraTS},
-  year={2023}
+@article{brats2023,
+  title={The {RSNA-ASNR-MICCAI} {BraTS} 2021 Benchmark on Brain Tumor Segmentation and Radiogenomic Classification},
+  author={Baid, Ujjwal and Ghodasara, Satyam and Mohan, Suyash and others},
+  journal={arXiv preprint arXiv:2107.02314},
+  year={2021}
+}
+
+@article{menze2015brats,
+  title={The Multimodal Brain Tumor Image Segmentation Benchmark ({BRATS})},
+  author={Menze, Bjoern H and Jakab, Andras and Bauer, Stefan and others},
+  journal={IEEE Trans. Med. Imaging},
+  volume={34},
+  number={10},
+  pages={1993--2024},
+  year={2015}
 }
 
 @misc{ixi,
   title={{IXI} Dataset},
-  author={Imperial College London and Guy's Hospital},
+  author={{Imperial College London and Guy's Hospital}},
   year={2008},
   url={https://brain-development.org/ixi-dataset/},
-  note={Brain Development, research use}
 }
 
 @misc{peft,
-  title={PEFT: State-of-the-art Parameter-Efficient Fine-Tuning methods},
-  author={Hugging Face},
+  title={{PEFT}: State-of-the-art Parameter-Efficient Fine-Tuning methods},
+  author={{Hugging Face}},
   year={2023},
   url={https://github.com/huggingface/peft}
 }
 
-@article{unetr,
-  title={UNETR: Transformers for 3D Medical Image Segmentation},
-  author={Hatamizadeh, Ali and others},
-  journal={WACV},
+@inproceedings{unetr,
+  title={{UNETR}: Transformers for {3D} Medical Image Segmentation},
+  author={Hatamizadeh, Ali and Tang, Yucheng and Nath, Vishwesh and others},
+  booktitle={Proc. WACV},
+  pages={574--584},
   year={2022}
 }
 
 @misc{baseline,
-  title={FOMO Baseline Codebase},
-  author={FOMO25},
+  title={{FOMO} Baseline Codebase},
+  author={{FOMO25}},
   year={2025},
   url={https://github.com/fomo25/baseline-codebase}
 }
 
 
-@article{hu2024computational,
-  title={Computational Limits of Low-Rank Adaptation (Lora) Fine-Tuning for Transformer Models},
+@inproceedings{hu2024computational,
+  title={Computational Limits of Low-Rank Adaptation ({LoRA}) Fine-Tuning for Transformer Models},
   author={Hu, Jerry Yao-Chieh and Su, Maojiang and Kuo, En-Jui and Song, Zhao and Liu, Han},
-  journal={arXiv preprint arXiv:2406.03136},
-  year={2024}
+  booktitle={Proc. ICLR},
+  year={2025}
 }
 
 @inproceedings{prefix_tuning,
   title={Prefix-Tuning: Optimizing Continuous Prompts for Generation},
   author={Li, Xiang Lisa and Liang, Percy},
-  booktitle={ACL},
+  booktitle={Proc. ACL},
+  pages={4582--4597},
   year={2021}
 }
 
 @inproceedings{bitfit,
   title={{BitFit}: Simple Parameter-efficient Fine-tuning for Transformer-based Masked Language-models},
   author={Zaken, Elad Ben and Ravfogel, Shauli and Goldberg, Yoav},
-  booktitle={ACL},
+  booktitle={Proc. ACL},
+  pages={1--9},
   year={2022}
 }
 
-@article{packnet,
+@inproceedings{packnet,
   title={{PackNet}: Adding Multiple Tasks to a Single Network by Iterative Pruning},
   author={Mallya, Arun and Lazebnik, Svetlana},
-  journal={CVPR},
+  booktitle={Proc. CVPR},
+  pages={7765--7773},
   year={2018}
 }
 
-@article{piggyback,
+@inproceedings{piggyback,
   title={Piggyback: Adapting a Single Network to Multiple Tasks by Learning to Mask Weights},
-  author={Mallya, Arun and Davis, Davi and Lazebnik, Svetlana},
-  journal={ECCV},
+  author={Mallya, Arun and Davis, Dillon and Lazebnik, Svetlana},
+  booktitle={Proc. ECCV},
+  pages={67--82},
   year={2018}
 }
 
-@article{derakhshani2022lifelonger,
-  title={LifeLonger: A Benchmark for Continual Disease Classification},
-  author={Derakhshani, Mohammad Mahdi and others},
-  journal={MICCAI},
+@inproceedings{derakhshani2022lifelonger,
+  title={{LifeLonger}: A Benchmark for Continual Disease Classification},
+  author={Derakhshani, Mohammad Mahdi and Najdenkoska, Ivona and van Sonsbeek, Tom and others},
+  booktitle={Proc. MICCAI},
+  pages={314--324},
   year={2022}
 }
 
 @article{gonzalez2023lifelong,
   title={Lifelong {nnU-Net}: A Framework for Standardized Medical Continual Learning},
-  author={Gonz{\'a}lez, Camila and others},
-  journal={Scientific Reports},
+  author={Gonz{\'a}lez, Camila and Ranem, Amin and Pinto dos Santos, Daniel and Othman, Ahmed and Mukhopadhyay, Anirban},
+  journal={Sci. Rep.},
   volume={13},
+  pages={9381},
   year={2023}
 }
 
 @article{sammed3d,
-  title={{SAM-Med3D}},
-  author={Wang, Haoyu and others},
+  title={{SAM-Med3D}: Towards General-purpose Segmentation Models for Volumetric Medical Images},
+  author={Wang, Haoyu and Guo, Sizheng and Ye, Jin and others},
   journal={arXiv preprint arXiv:2310.15161},
   year={2023}
 }
 
 @article{chen2024towards,
-  title={Towards a Visual-Language Foundation Model for Computational Pathology},
-  author={Chen, Richard J and others},
-  journal={Nature Medicine},
+  title={Towards a General-Purpose Foundation Model for Computational Pathology},
+  author={Chen, Richard J and Ding, Tong and Lu, Ming Y and others},
+  journal={Nat. Med.},
   volume={30},
-  pages={863--874},
+  pages={850--862},
   year={2024}
 }
 
 @inproceedings{rebuffi2017icarl,
-  title={i{CARL}: Incremental Classifier and Representation Learning},
-  author={Rebuffi, Sylvestre-Alvise and Komodakis, Nikos and others},
-  booktitle={CVPR},
+  title={{iCaRL}: Incremental Classifier and Representation Learning},
+  author={Rebuffi, Sylvestre-Alvise and Kolesnikov, Alexander and Sperl, Georg and Lampert, Christoph H.},
+  booktitle={Proc. CVPR},
+  pages={2001--2010},
   year={2017}
 }
 
-@article{zenke2017continual,
+@inproceedings{zenke2017continual,
   title={Continual Learning Through Synaptic Intelligence},
   author={Zenke, Friedemann and Poole, Ben and Ganguli, Surya},
-  journal={ICML},
+  booktitle={Proc. ICML},
+  pages={3987--3995},
   year={2017}
 }
 @article{msd,
   title={The Medical Segmentation Decathlon},
   author={Antonelli, Michela and Reinke, Annika and Bakas, Spyridon and others},
-  journal={Nature Communications},
+  journal={Nat. Commun.},
   volume={13},
   number={1},
   pages={4128},
@@ -177,7 +198,7 @@
 @article{isles2022,
   title={{ISLES} 2022: A multi-center magnetic resonance imaging stroke lesion segmentation dataset},
   author={Hernandez Petzsche, Moritz R and de la Rosa, Ezequiel and Hanning, Uta and others},
-  journal={Scientific Data},
+  journal={Sci. Data},
   volume={9},
   number={1},
   pages={762},
@@ -185,9 +206,9 @@
 }
 
 @article{wmh2017,
-  author  = {Kuijf, Hugo J. and Biesbroek, J. Matthijs and de Bresser, Jeroen and Heinen, Rutger and Andermatt, Simon and Bento, Mariana and Berseth, Matt and Belyaev, Mikhail and Cardoso, M. Jorge and Casamitjana, Adri{\`a} and others},
+  author  = {Kuijf, Hugo J. and Biesbroek, J. Matthijs and de Bresser, Jeroen and others},
   title   = {Standardized Assessment of Automatic Segmentation of White Matter Hyperintensities and Results of the {WMH} Segmentation Challenge},
-  journal = {IEEE Transactions on Medical Imaging},
+  journal = {IEEE Trans. Med. Imaging},
   volume  = {38},
   number  = {11},
   pages   = {2556--2568},
@@ -196,9 +217,9 @@
 }
 
 @article{oasis1,
-  author  = {Marcus, Daniel S. and Wang, Tracy H. and Parker, Jamie and Csernansky, John G. and Morris, John C. and Buckner, Randy L.},
+  author  = {Marcus, Daniel S. and Wang, Tracy H. and Parker, Jamie and others},
   title   = {Open Access Series of Imaging Studies ({OASIS}): Cross-Sectional {MRI} Data in Young, Middle Aged, Nondemented, and Demented Older Adults},
-  journal = {Journal of Cognitive Neuroscience},
+  journal = {J. Cogn. Neurosci.},
   volume  = {19},
   number  = {9},
   pages   = {1498--1507},
@@ -208,16 +229,16 @@
 
 @inproceedings{hatamizadeh2022swin,
   title={Swin {UNETR}: Swin Transformers for Semantic Segmentation of Brain Tumors in {MRI} Images},
-  author={Hatamizadeh, Ali and Nath, Vishwesh and Tang, Yucheng and Yang, Dong and Roth, Holger R. and Xu, Daguang},
-  booktitle={Brainlesion: Glioma, Multiple Sclerosis, Stroke and Traumatic Brain Injuries (BrainLes 2021), LNCS 12962},
+  author={Hatamizadeh, Ali and Nath, Vishwesh and Tang, Yucheng and others},
+  booktitle={Proc. BrainLes (MICCAI Workshop)},
   pages={272--284},
   year={2022}
 }
 
 @inproceedings{tang2022selfsupervised,
-  title={Self-Supervised Pre-Training of Swin Transformers for {3D} Medical Image Analysis},
-  author={Tang, Yucheng and Yang, Dong and Li, Wenqi and Roth, Holger R. and Landman, Bennett and Xu, Daguang and Nath, Vishwesh and Hatamizadeh, Ali},
-  booktitle={Proc. IEEE/CVF Conf. Computer Vision and Pattern Recognition (CVPR)},
+  title={Self-Supervised Pre-Training of {Swin} Transformers for {3D} Medical Image Analysis},
+  author={Tang, Yucheng and Yang, Dong and Li, Wenqi and others},
+  booktitle={Proc. CVPR},
   pages={20730--20740},
   year={2022}
 }
