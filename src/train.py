@@ -259,6 +259,39 @@ def get_encoder_features(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
     return enc
 
 
+# --- Output distillation (LwF as Li & Hoiem define it) and labelled rehearsal ---
+def task_loss_fn(task_type: str):
+    """The training loss each task uses (same definitions as train_task)."""
+    if task_type == "classification":
+        return lambda out, y: F.cross_entropy(out, y.view(-1).long())
+    if task_type == "segmentation":
+        def _dice_ce(pred, target):
+            target = target.squeeze(1).long().clamp(0, 1)
+            ce = F.cross_entropy(pred, target, ignore_index=255)
+            pred_soft = F.softmax(pred, dim=1)[:, 1]
+            dice = 1 - (2 * (pred_soft * (target.float())).sum() + 1e-8) / (pred_soft.sum() + target.float().sum() + 1e-8)
+            return ce + dice
+        return _dice_ce
+    return lambda out, y: F.mse_loss(out, y.view(out.shape).float())
+
+
+def distill_loss(new_out: torch.Tensor, old_out: torch.Tensor, task_type: str, temp: float = 2.0) -> torch.Tensor:
+    """Knowledge-distillation loss between the old task head's outputs before and after.
+
+    Classification and segmentation: KL(softmax(old/T) || softmax(new/T)) averaged over
+    samples (and voxels), scaled by T^2 as in Hinton et al. Regression: MSE.
+    """
+    if task_type == "regression":
+        return F.mse_loss(new_out, old_out)
+    p_old = F.softmax(old_out / temp, dim=1)
+    kl = (p_old * (F.log_softmax(old_out / temp, dim=1) - F.log_softmax(new_out / temp, dim=1))).sum(1)
+    return kl.mean() * temp * temp
+
+
+def _old_task_input(old_model: nn.Module, x: torch.Tensor) -> torch.Tensor:
+    return _adapt_channels(x, _get_encoder_in_channels(old_model))
+
+
 # --- Extended train_task with EWC, LwF, Replay ---
 def train_task_cl(
     model: nn.Module,
@@ -284,8 +317,16 @@ def train_task_cl(
     replay_task_ids: Optional[List[int]] = None,
     replay_weight: float = 0.5,
     replay_batch_size: int = 2,
+    # LwF with output distillation: [(snapshot_model, tied_model, old_task_type)], where the
+    # snapshot is the frozen pre-task model of an earlier task and the tied model is that
+    # task's frozen head on top of the *current* shared encoder modules.
+    lwf_targets: Optional[list] = None,
+    # Labelled rehearsal: [(tied_model, sampler, old_task_type)], sampler() -> (x, y) of
+    # stored earlier-task examples; the earlier task's own loss is added at each step.
+    rehearsal: Optional[list] = None,
 ) -> Dict[str, float]:
-    """Train with optional EWC, LwF, or Replay."""
+    """Train with optional EWC, LwF (feature or output distillation), or replay
+    (feature distillation on a buffer, or labelled rehearsal)."""
     model = model.to(device)
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats()
@@ -347,6 +388,22 @@ def train_task_cl(
                 new_feat_r = get_encoder_features(model, x_r)
                 loss_replay = F.mse_loss(new_feat_r, old_feat_r.to(new_feat_r.device))
                 loss = loss + replay_weight * loss_replay
+
+            # LwF (output distillation): keep every earlier task's head output on the new
+            # task's inputs close to what the pre-task model produced.
+            if lwf_targets:
+                for snap, tied, ttype in lwf_targets:
+                    xo = _old_task_input(snap, x)
+                    with torch.no_grad():
+                        old_out = snap(xo)
+                    loss = loss + distill_weight * distill_loss(tied(xo), old_out, ttype, distill_temp)
+
+            # Labelled rehearsal: the earlier task's own loss on stored labelled examples.
+            if rehearsal:
+                for tied, sampler, ttype in rehearsal:
+                    x_r, y_r = sampler()
+                    x_r, y_r = x_r.to(device), y_r.to(device)
+                    loss = loss + replay_weight * task_loss_fn(ttype)(tied(x_r), y_r)
 
             # EWC
             if ewc_fisher is not None and ewc_optimal is not None:

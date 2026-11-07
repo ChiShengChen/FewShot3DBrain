@@ -47,12 +47,20 @@ from src.replay_buffer import ReplayBuffer  # noqa: E402
 from src.train import compute_fisher_diagonal, train_task, train_task_cl  # noqa: E402
 
 METHODS = ["lora", "lora_head", "lora_encoder_only", "sequential_linear", "sequential_ft",
-           "ewc", "lwf", "replay", "bitfit", "pertask_lora", "adapter"]
+           "ewc", "lwf", "replay", "bitfit", "pertask_lora", "adapter",
+           # Reviewer controls (JBHI revision 2):
+           #   head_only     only the task head trains (segmentation: the 66-parameter output
+           #                 projection on a frozen U-Net); a small-head segmentation arm
+           #   partial_ft    deepest encoder stage + everything downstream; practitioners' default
+           #   mlp_head      frozen encoder, two-layer MLP head (global tasks); a larger head
+           #   lwf_out       LwF as Li & Hoiem: distil the earlier task head's OUTPUTS
+           #   replay_label  experience replay with labels: the earlier task's own loss on a buffer
+           "head_only", "partial_ft", "mlp_head", "lwf_out", "replay_label"]
 # Methods that carry one model through the task sequence (and can therefore forget).
 # The regularisation / distillation / replay baselines are full fine-tuning plus a
 # forgetting-mitigation term, so they belong here too.
-SEQUENTIAL = ("sequential_linear", "sequential_ft", "ewc", "lwf", "replay")
-CL_METHODS = ("ewc", "lwf", "replay")
+SEQUENTIAL = ("sequential_linear", "sequential_ft", "ewc", "lwf", "replay", "lwf_out", "replay_label")
+CL_METHODS = ("ewc", "lwf", "replay", "lwf_out", "replay_label")
 
 
 def make_loaders(files_train, files_val, task_type, patch_size, batch_size):
@@ -67,7 +75,8 @@ def make_loaders(files_train, files_val, task_type, patch_size, batch_size):
     )
 
 
-def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_dim=16, backbone="unet_b"):
+def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_dim=16, backbone="unet_b",
+                head_hidden=256):
     """Every method starts from the same pretrained backbone; they differ in what is trainable.
 
     Trainable budgets differ by more than two orders of magnitude between these methods
@@ -83,6 +92,11 @@ def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_di
         # 93.8K on segmentation). Task-isolated like LoRA; output projection trained below.
         model = Model(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
                           model_name=backbone, lora_r=0, lora_decoder=True, adapter_dim=adapter_dim)
+    elif method == "mlp_head":
+        if cfg["task_type"] == "segmentation":
+            raise SystemExit("mlp_head is a global-task control; segmentation already has a decoder")
+        model = Model(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
+                      model_name=backbone, lora_r=0, lora_decoder=False, head_hidden=head_hidden)
     elif method == "lora_encoder_only":
         model = Model(task_id, cfg["modalities"], patch_size, pretrained_path=pretrained,
                           model_name=backbone, lora_r=lora_r, lora_decoder=False)
@@ -105,6 +119,18 @@ def build_model(method, task_id, cfg, patch_size, pretrained, lora_r, adapter_di
         for n, p in model.named_parameters():
             if "out_conv" in n:
                 p.requires_grad = True
+    elif method == "head_only":
+        # Only the task head trains. Segmentation: the 66-parameter output projection on an
+        # otherwise frozen U-Net (encoder and decoder). Global tasks: identical to
+        # sequential_linear (the pooled head), kept as a separate name for the seg arm.
+        for n, p in model.named_parameters():
+            p.requires_grad = "out_conv" in n or n.startswith("head")
+    elif method == "partial_ft":
+        # Deepest encoder stage plus everything downstream of it (decoder and output
+        # projection, or the pooled head). Task-isolated: rebuilt from the checkpoint per task.
+        for n, p in model.named_parameters():
+            p.requires_grad = ("encoder_conv4" in n or "backbone.decoder" in n
+                               or "out_conv" in n or n.startswith("head"))
     elif method == "bitfit":
         # PEFT comparator at a similar budget to LoRA: bias terms only (plus the task
         # head / output projection, as every PEFT recipe trains the new head). Built with
@@ -123,6 +149,33 @@ def trainable_report(model):
     tr = sum(p.numel() for p in model.parameters() if p.requires_grad)
     tot = sum(p.numel() for p in model.parameters())
     return {"trainable": int(tr), "total": int(tot), "trainable_pct": 100.0 * tr / max(tot, 1)}
+
+
+def task_patch(args, task_id):
+    """Patch edge for a task: --patch_sizes T:P overrides --patch_size (whole-head tasks use 96)."""
+    return (int(args.patch_overrides.get(task_id, args.patch_size)),) * 3
+
+
+def task_eval_bs(args, task_id):
+    """Whole-head 96^3 windows are evaluated two at a time, as in every earlier whole-head run."""
+    return args.eval_batch_size if task_patch(args, task_id)[0] <= 64 else min(args.eval_batch_size, 2)
+
+
+def _tie_shared_encoder(old_task_model, model):
+    """Return old_task_model with its shared encoder stages replaced by model's (same objects).
+
+    The task-specific input convolution, the decoder / head stay the earlier task's and are
+    frozen; gradients through the earlier task's output reach only the shared stages.
+    """
+    enc_old, enc_new = old_task_model.backbone.encoder, model.backbone.encoder
+    for name, child in enc_new.named_children():
+        if name != "in_conv" and any(True for _ in child.parameters()):
+            setattr(enc_old, name, child)
+    shared = {id(p) for p in model.parameters()}
+    for p in old_task_model.parameters():
+        if id(p) not in shared:
+            p.requires_grad = False
+    return old_task_model
 
 
 def run(args):
@@ -162,6 +215,9 @@ def run(args):
         "buffer": ReplayBuffer(capacity=args.replay_capacity, seed=args.seed)
                   if args.method == "replay" else None,
         "seen": [],                               # task ids already learned (replay sources)
+        "task_models": {},                        # lwf_out / replay_label: frozen model per learned task
+        "label_buffer": ReplayBuffer(capacity=args.replay_capacity, seed=args.seed)
+                        if args.method == "replay_label" else None,
     }
 
     for pos, task_id in enumerate(args.tasks):
@@ -186,13 +242,15 @@ def run(args):
               f"train={len(splits['train'])} val={len(splits['val'])} test={len(splits['test'])} ===",
               flush=True)
 
+        patch_size = task_patch(args, task_id)
         train_loader, val_loader = make_loaders(splits["train"], splits["val"],
                                                 cfg["task_type"], patch_size, args.batch_size)
 
         # sequential_* carry the backbone forward through the sequence (that is what makes
         # them forget); the isolated methods rebuild from the pretrained checkpoint.
         model = build_model(args.method, task_id, cfg, patch_size, args.pretrained_path, args.lora_r,
-                            adapter_dim=args.adapter_dim, backbone=args.backbone)
+                            adapter_dim=args.adapter_dim, backbone=args.backbone,
+                            head_hidden=args.head_hidden)
         if args.method in SEQUENTIAL and shared_model is not None:
             model.load_state_dict(_carry_backbone(shared_model, model), strict=False)
 
@@ -200,9 +258,74 @@ def run(args):
         print(f"trainable params: {params['trainable']:,} "
               f"({params['trainable_pct']:.3f}% of {params['total']:,})", flush=True)
 
+        # --init_first_from: start the sequence from an existing run's first-task checkpoint
+        # (same split, same seed) instead of retraining it, so every continual-learning method
+        # in a comparison begins from the identical first-task model and BWT differences come
+        # only from how the second task is learned.
+        if pos == 0 and args.init_first_from:
+            import shutil
+            src_dir = Path(args.init_first_from) / f"seed{args.seed}"
+            src_ckpt = src_dir / f"task{task_id}" / f"task{task_id}_best.pt"
+            src_res = json.load(open(src_dir / "results.json"))["per_task"][f"task{task_id}"]
+            (out_dir / f"task{task_id}").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_ckpt, out_dir / f"task{task_id}" / f"task{task_id}_best.pt")
+            model.load_state_dict(torch.load(src_ckpt, map_location="cpu")["model_state"])
+            model = model.to(device)
+            src_pc = src_dir / f"task{task_id}_per_case.json"
+            if src_pc.exists():
+                shutil.copy2(src_pc, out_dir / f"task{task_id}_per_case.json")
+            # Drop the source run's own re-scorings after its later tasks; this run adds its own.
+            src_res = {k: v for k, v in src_res.items() if not k.startswith("test_after_task")}
+            results["per_task"][f"task{task_id}"] = {**src_res, "position": pos, "initialised_from": str(src_dir)}
+            print(f"task {task_id}: loaded {src_ckpt} (test {src_res['test']}); not retrained", flush=True)
+            shared_model = model
+            if args.method == "ewc":
+                cl_state["fisher"], cl_state["optimal"] = compute_fisher_diagonal(
+                    model, train_loader, task_id, cfg["task_type"], device)
+            if args.method in ("lwf", "replay"):
+                import copy
+                cl_state["old_model"] = copy.deepcopy(model).eval()
+                for p in cl_state["old_model"].parameters():
+                    p.requires_grad = False
+            if args.method == "replay":
+                cl_state["buffer"].add_from_loader(task_id, train_loader, max_samples=args.replay_capacity)
+                cl_state["seen"].append(task_id)
+            if args.method in ("lwf_out", "replay_label"):
+                import copy
+                frozen = copy.deepcopy(model).cpu().eval()
+                for p in frozen.parameters():
+                    p.requires_grad = False
+                cl_state["task_models"][task_id] = frozen
+            if args.method == "replay_label":
+                buf = cl_state["label_buffer"]
+                while len(buf.buffers.get(task_id, ())) < args.replay_capacity:
+                    before = len(buf.buffers.get(task_id, ()))
+                    buf.add_from_loader(task_id, train_loader, max_samples=args.replay_capacity - before)
+                    if len(buf.buffers.get(task_id, ())) == before:
+                        break
+            continue
+
         t0 = time.perf_counter()
         common = dict(task_id=task_id, task_type=cfg["task_type"], device=device,
                       epochs=args.epochs, lr=args.lr, save_dir=str(out_dir / f"task{task_id}"))
+        lwf_targets, rehearsal = None, None
+        if args.method in ("lwf_out", "replay_label") and cl_state["task_models"]:
+            import copy
+            lwf_targets, rehearsal = [], []
+            for prev_id, prev_m in cl_state["task_models"].items():
+                ptype = TASK_CONFIGS[prev_id]["task_type"]
+                tied = _tie_shared_encoder(copy.deepcopy(prev_m), model).to(device)
+                if args.method == "lwf_out":
+                    snap = copy.deepcopy(prev_m)
+                    snap.load_state_dict(_carry_encoder(shared_model, snap), strict=False)
+                    snap = snap.to(device).eval()
+                    for p in snap.parameters():
+                        p.requires_grad = False
+                    lwf_targets.append((snap, tied, ptype))
+                else:
+                    buf = cl_state["label_buffer"]
+                    rehearsal.append((tied, (lambda b=buf, t=prev_id: b.sample(t, args.batch_size)), ptype))
+
         if args.method in CL_METHODS:
             val_metrics = train_task_cl(
                 model, train_loader, val_loader, **common,
@@ -214,6 +337,8 @@ def run(args):
                 replay_buffer=cl_state["buffer"],
                 replay_task_ids=list(cl_state["seen"]) if args.method == "replay" else None,
                 replay_weight=args.distill_weight,
+                lwf_targets=lwf_targets,
+                rehearsal=rehearsal,
             )
         else:
             val_metrics = train_task(model, train_loader, val_loader, **common)
@@ -230,7 +355,7 @@ def run(args):
         try:
             test_metrics = evaluate_split(model, splits["test"], task_id, device,
                                           patch=patch_size, overlap=args.overlap,
-                                          batch_size=args.eval_batch_size,
+                                          batch_size=task_eval_bs(args, task_id),
                                           max_channels=cfg["modalities"],
                                           return_per_case=True)
             per_case = test_metrics.pop("per_case", None)
@@ -270,6 +395,22 @@ def run(args):
         if args.method == "replay":
             cl_state["buffer"].add_from_loader(task_id, train_loader, max_samples=args.replay_capacity)
             cl_state["seen"].append(task_id)
+        if args.method in ("lwf_out", "replay_label"):
+            import copy
+            frozen = copy.deepcopy(model).cpu().eval()
+            for p in frozen.parameters():
+                p.requires_grad = False
+            cl_state["task_models"][task_id] = frozen
+        if args.method == "replay_label":
+            # Fill the buffer with labelled training crops of this task (several passes over
+            # the 32 training volumes, each pass drawing new random crops).
+            buf = cl_state["label_buffer"]
+            while len(buf.buffers.get(task_id, ())) < args.replay_capacity:
+                before = len(buf.buffers.get(task_id, ()))
+                buf.add_from_loader(task_id, train_loader,
+                                    max_samples=args.replay_capacity - before)
+                if len(buf.buffers.get(task_id, ())) == before:
+                    break
 
         # Backward transfer: re-score every earlier task with the model as it now stands.
         if args.method in SEQUENTIAL and pos > 0:
@@ -278,8 +419,9 @@ def run(args):
                 psplits = load_or_make_splits(args.data_dir, prev, args.n_shot, seed=args.seed,
                                               split_dir=args.split_dir,
                                               max_test_subjects=args.max_test_subjects)
-                prev_model = build_model(args.method, prev, pcfg, patch_size,
-                                         args.pretrained_path, args.lora_r, backbone=args.backbone)
+                prev_model = build_model(args.method, prev, pcfg, task_patch(args, prev),
+                                         args.pretrained_path, args.lora_r, backbone=args.backbone,
+                                         head_hidden=args.head_hidden)
                 # Restore task `prev` exactly as it was left, then overwrite only the
                 # shared encoder with its current (post-task-`task_id`) state. That is
                 # what forgetting means here: the decoder/head of the old task is intact,
@@ -292,8 +434,8 @@ def run(args):
                 prev_model = prev_model.to(device)
                 try:
                     after = evaluate_split(prev_model, psplits["test"], prev, device,
-                                           patch=patch_size, overlap=args.overlap,
-                                           batch_size=args.eval_batch_size,
+                                           patch=task_patch(args, prev), overlap=args.overlap,
+                                           batch_size=task_eval_bs(args, prev),
                                            max_channels=pcfg["modalities"])
                 except Exception as exc:  # noqa: BLE001
                     import traceback
@@ -344,6 +486,13 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--lora_r", type=int, default=8)
     ap.add_argument("--patch_size", type=int, default=64)
+    ap.add_argument("--patch_sizes", nargs="*", default=[],
+                    help="per-task overrides T:P, e.g. 2:64 5:96 for BraTS then whole-head brain age")
+    ap.add_argument("--init_first_from", default="",
+                    help="run directory (without seed) whose first-task checkpoint and test results "
+                         "seed the sequence, e.g. outputs/benchmark_v2/n32/sequential_ft")
+    ap.add_argument("--head_hidden", type=int, default=256,
+                    help="hidden width of the two-layer head used by --method mlp_head")
     ap.add_argument("--batch_size", type=int, default=2)
     ap.add_argument("--eval_batch_size", type=int, default=8)
     ap.add_argument("--overlap", type=float, default=0.5)
@@ -360,6 +509,7 @@ def main():
                     help="LwF feature-distillation weight; also used as the replay weight")
     ap.add_argument("--replay_capacity", type=int, default=100)
     args = ap.parse_args()
+    args.patch_overrides = {int(k): int(v) for k, v in (t.split(":") for t in args.patch_sizes)}
     if args.pretrained_path is None:
         args.pretrained_path = DEFAULT_WEIGHTS[args.backbone]
 

@@ -17,6 +17,27 @@ from typing import Optional, Literal
 from models.networks.unet import unet_b, unet_xl
 from models.networks.heads import ClsRegHead
 
+
+class MLPHead(nn.Module):
+    """Two-layer pooled head (in -> hidden -> out, GELU) for the ``mlp_head`` control.
+
+    Same contract as FOMO's ClsRegHead: takes the encoder's feature list, pools the
+    deepest map, returns logits / a scalar. Defined here rather than in the FOMO package
+    so the vendored code stays untouched. Parameter names are ``head.fc1.*`` /
+    ``head.fc2.*``, so every ``n.startswith("head")`` rule in the driver still applies.
+    """
+    def __init__(self, in_channels: int, hidden: int, num_classes: int):
+        super().__init__()
+        self.global_pool = nn.AdaptiveAvgPool3d((1, 1, 1))
+        self.fc1 = nn.Linear(in_channels, hidden)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(hidden, num_classes)
+
+    def forward(self, x):
+        x = x[-1]
+        x = torch.flatten(self.global_pool(x), 1)
+        return self.fc2(self.act(self.fc1(x)))
+
 def _load_pretrained_weights(path: str):
     """Load state dict from checkpoint (PyTorch Lightning or raw)."""
     try:
@@ -56,22 +77,26 @@ class TaskModel(nn.Module):
         lora_decoder: bool = True,
         adapter_dim: int = 0,
         adapter_dropout: float = 0.1,
+        head_hidden: int = 0,
     ):
         super().__init__()
         self.task_id = task_id
         self.task_type = self._get_task_type(task_id)
+        # head_hidden > 0 swaps the linear pooled head for a 2-layer MLP (mlp_head control);
+        # 0 keeps FOMO's ClsRegHead, so every existing configuration is unchanged.
+        self.head_hidden = int(head_hidden or 0)
 
         # Dispatch on task *type*, not id, so additional tasks of an existing kind
         # (e.g. a second segmentation dataset) need only a TASK_CONFIGS entry.
         if self.task_type == "classification":
             self.backbone = self._build_encoder_only(model_name, input_channels, patch_size)
-            self.head = ClsRegHead(in_channels=32 * 16, num_classes=2)  # unet_b starting_filters=32
+            self.head = self._make_head(32 * 16, 2)  # unet_b starting_filters=32
         elif self.task_type == "segmentation":
             self.backbone = self._build_full_unet(model_name, input_channels, 2, patch_size)
             self.head = None
         elif self.task_type == "regression":
             self.backbone = self._build_encoder_only(model_name, input_channels, patch_size)
-            self.head = ClsRegHead(in_channels=32 * 16, num_classes=1)
+            self.head = self._make_head(32 * 16, 1)
         else:
             raise ValueError(f"Unknown task type {self.task_type!r} for task_id {task_id}")
 
@@ -105,6 +130,11 @@ class TaskModel(nn.Module):
         if self.head is not None:
             for p in self.head.parameters():
                 p.requires_grad = True
+
+    def _make_head(self, in_channels: int, num_classes: int) -> nn.Module:
+        if self.head_hidden > 0:
+            return MLPHead(in_channels, self.head_hidden, num_classes)
+        return ClsRegHead(in_channels=in_channels, num_classes=num_classes)
 
     def _get_task_type(self, task_id: int) -> str:
         try:
