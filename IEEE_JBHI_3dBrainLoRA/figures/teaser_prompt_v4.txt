@@ -1,0 +1,45 @@
+PROMPT FOR THE FIG. 1 OVERVIEW IMAGE (revision 2026-11-08; replaces the v3 prompt)
+
+Create a wide scientific overview figure (aspect ratio about 2.3:1, e.g. 1920 x 830 px, white background, clean vector-poster style, sans-serif font, navy #1f3f8f headings, blue #2a78d6 / orange #eb6834 / yellow #eda100 / green #1baf7a / red #e34948 as the five series colours). The figure has a title line across the top, three side-by-side panels labelled (a), (b), (c) in bold, and a footer strip with three findings. All text below must appear exactly as written.
+
+TITLE (top, centred, navy, bold):
+Which adaptation strategy for a new task?  What the task inherits decides it: train the large head; fit the small one properly before moving the encoder
+
+PANEL (a), left third, heading: "Nine tasks, six cohorts, 32 labelled volumes each"
+  Upper dashed box, orange outline, label "Large task head: inherits the 8.45M-parameter decoder". Four small square brain-MRI slices in a row with the target region in translucent red, captions: "BraTS glioma", "ISLES stroke", "Hippocampus", "WMH, 5 scanners".
+  Lower dashed box, blue outline, label "Small task head: ~1K-parameter head on pooled features". Five small square T1 brain-MRI slices (no overlay), captions: "IXI age", "IXI sex", "OASIS age", "OASIS sex", "OASIS CDR".
+  Small grey footnote under the boxes: "One held-out test slice per task; segmentation targets in red. Six cohorts, five scanners; the head size is a property of the task that is known before any training run."
+
+PANEL (b), middle third, heading: "Adaptation strategies: what is frozen and what is trained"
+  Column headers across the top: "input", "encoder", "decoder", "head".
+  Four horizontal rows, each: a small 3D MRI cube on the left, then two encoder blocks, two decoder blocks and a rounded "Head" box with an arrow to "ŷ". Frozen blocks are light blue with a snowflake; trained blocks are light orange with a flame.
+   Row 1 "LoRA + head": all four blocks frozen (snowflake), each with a small orange trapezoid labelled "A" and a ⊕ underneath (the low-rank branch); the Head box has a flame.
+   Row 2 "Linear probe": two encoder blocks frozen, two decoder blocks trained (flame), Head trained.
+   Row 3 "BitFit": all four blocks frozen, each with a small orange square in its corner (trainable bias); Head trained.
+   Row 4 "Full fine-tuning": all four blocks trained (flame), Head trained.
+  Small caption under the rows: "Input: 3D MRI, C x 64^3 patch (96^3 whole head for age / sex). Backbone: FOMO 3D U-Net; 32 volumes, 100 epochs, one recipe."
+  Legend line: "❄ = frozen   🔥 = trained for the new task   [A] = low-rank adapter (LoRA)   ▫ = trainable bias (BitFit)"
+
+PANEL (c), right third, two grouped bar charts, one above the other, error bars = SD over five seeds.
+  Upper chart title (bold): "Large head → train it; LoRA matches it, never beats it; BitFit collapses"
+   y-axis "Dice" from 0 to 1.0; x groups BraTS, ISLES, Hippo., WMH; four bars per group in this order and colour:
+    LoRA + head (blue):     BraTS 0.77±0.01, ISLES 0.47±0.05, Hippo. 0.87±0.00, WMH 0.52±0.03
+    Linear probe (orange):  BraTS 0.78±0.03, ISLES 0.42±0.03, Hippo. 0.88±0.00, WMH 0.54±0.04
+    BitFit (yellow):        BraTS 0.44±0.03, ISLES 0.11±0.07, Hippo. 0.37±0.07, WMH 0.08±0.07
+    Full FT (green):        BraTS 0.79±0.03, ISLES 0.41±0.06, Hippo. 0.90±0.00, WMH 0.63±0.03
+  Lower chart title (bold, two lines): "Small head → a closed-form probe learns from frozen features;" / "the gradient-trained probe and BitFit output a constant"
+   y-axis "R²  |  AUC" from 0 to 1.0; x groups IXI age, OASIS age, IXI sex, OASIS sex; five bars per group:
+    LoRA + head (blue):        IXI age 0.31±0.15, OASIS age 0.60±0.06, IXI sex 0.88±0.08, OASIS sex 0.92±0.03
+    Linear probe (orange):     IXI age 0.00,      OASIS age 0.00,      IXI sex 0.70±0.11, OASIS sex 0.73±0.06
+    BitFit (yellow):           IXI age 0.00,      OASIS age 0.00,      IXI sex 0.74±0.11, OASIS sex 0.75±0.04
+    Full FT (green):           IXI age 0.13±0.05, OASIS age 0.60±0.06, IXI sex 0.81±0.05, OASIS sex 0.86±0.09
+    Closed-form probe (red):   IXI age 0.23±0.05, OASIS age 0.41±0.06, IXI sex 0.88±0.02, OASIS sex 0.84±0.02
+   A dashed grey horizontal line at 0.5 spanning only the two sex groups, labelled "chance".
+  Shared legend under the lower chart, one row: "LoRA + head   Linear probe   BitFit   Full FT   Closed-form probe"
+
+FOOTER STRIP (full width, rounded box, three columns separated by thin vertical lines, each with a small coloured square, a navy bold lead-in and two lines of grey text):
+  [orange] "Forgetting:" a second segmentation task erases the first in either order (BraTS 0.78→0.20); EWC softens it, only freezing prevents it.
+  [blue]   "Pretraining:" 59 of 82 tensors load; under LoRA it equals random init on four tasks (+0.000 Dice on BraTS); frozen features beat random.
+  [green]  "Protocol:" subject-grouped splits, whole-volume inference, 5 seeds, 676 runs, seed-level paired tests, per-strategy learning rate.
+
+Do not add any other numbers, claims or decorative elements. Use the numbers exactly as given; they are the paper's Table VI / tables/all_tasks_body.tex and controls_body.tex (mean ± SD over seeds 42-46).
