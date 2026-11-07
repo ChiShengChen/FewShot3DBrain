@@ -78,3 +78,4 @@ Thumbs.db
 data/splits_v2/
 outputs/benchmark_v2/
 outputs/benchmark_v2/.submitted.tsv
+release_assets/
