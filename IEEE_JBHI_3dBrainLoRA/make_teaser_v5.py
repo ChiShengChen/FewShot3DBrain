@@ -140,7 +140,7 @@ def mri_cube(cx, cy, s, img):
 
 
 # ── title ─────────────────────────────────────────────────────────────────────
-txt(W / 2, H - 0.3, "Which adaptation strategy for a new task?  A rule that is knowable before training: does the task inherit a large head?",
+txt(W / 2, H - 0.3, "Which adaptation strategy for a new task?  What the task inherits decides it: train the large head; fit the small one properly before moving the encoder",
     fs=15, color=NAVY, weight="bold", ha="center")
 
 # ── panel frames ──────────────────────────────────────────────────────────────
@@ -250,23 +250,26 @@ for mi, (mname, col) in enumerate(methods):
     xs, ys, es = [], [], []
     for ti, (tl, suf, task) in enumerate(tasks):
         c = cfg[mname] + suf
-        if task == 4 and mname in ("Linear probe", "Full FT"): c = cfg[mname] + "_t243"
         m, s = ms(c, task, "dice"); xs.append(ti + (mi - 1.5) * bw); ys.append(m); es.append(s)
     a1.bar(xs, ys, bw - 0.03, color=col, label=mname, zorder=2); a1.errorbar(xs, ys, es, fmt="none", ecolor=INK2, elinewidth=0.6, capsize=1.5, zorder=3)
 a1.set_xticks(range(4)); a1.set_xticklabels([t[0] for t in tasks]); a1.set_ylim(0, 1.0); a1.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0]); a1.set_ylabel("Dice", fontsize=9, color=INK2)
-a1.set_title("Large head → train it; LoRA within 0.015 Dice; BitFit collapses", fontsize=9.5, weight="bold", loc="left", color=INK, pad=7)
+a1.set_title("Large head → train it; LoRA matches it, never beats it; BitFit collapses", fontsize=9.5, weight="bold", loc="left", color=INK, pad=7)
 
 a2 = chart(1.62, 3.3)
 gtasks = [("IXI age", 5, "_t5", "r2"), ("OASIS age", 9, "_t9", "r2"), ("IXI sex", 6, "_t6", "auc"), ("OASIS sex", 10, "_t10", "auc")]
-for mi, (mname, col) in enumerate(methods):
+methods2 = methods + [("Closed-form probe", RED)]
+cfg2 = dict(cfg, **{"Closed-form probe": "ridge_probe"})
+bw2 = 0.155
+for mi, (mname, col) in enumerate(methods2):
     xs, ys, es = [], [], []
     for ti, (tl, task, suf, key) in enumerate(gtasks):
-        m, s = ms(cfg[mname] + suf, task, key); xs.append(ti + (mi - 1.5) * bw); ys.append(max(m, 0) if key == "r2" else m); es.append(s)
-    a2.bar(xs, ys, bw - 0.03, color=col, zorder=2); a2.errorbar(xs, ys, es, fmt="none", ecolor=INK2, elinewidth=0.6, capsize=1.5, zorder=3)
+        m, s = ms(cfg2[mname] + suf, task, key); xs.append(ti + (mi - 2) * bw2); ys.append(max(m, 0) if key == "r2" else m); es.append(s)
+    a2.bar(xs, ys, bw2 - 0.025, color=col, label=mname if mname == "Closed-form probe" else None, zorder=2); a2.errorbar(xs, ys, es, fmt="none", ecolor=INK2, elinewidth=0.6, capsize=1.5, zorder=3)
 a2.axhline(0.5, xmin=0.44, xmax=1.0, color=MUTED, lw=0.8, ls=(0, (3, 3)), zorder=1); a2.text(1.5, 0.5, "chance", fontsize=6.8, color=MUTED, ha="center", va="center", zorder=4, bbox=dict(fc="white", ec="none", pad=1.2))
 a2.set_xticks(range(4)); a2.set_xticklabels([t[0] for t in gtasks]); a2.set_ylim(0, 1.0); a2.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0]); a2.set_ylabel("R²  |  AUC", fontsize=9, color=INK2)
-a2.set_title("Small head → only LoRA learns; probe and BitFit output a constant", fontsize=9.5, weight="bold", loc="left", color=INK, pad=7)
-a2.legend(*a1.get_legend_handles_labels(), ncol=4, fontsize=8.5, frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.19), handlelength=1.1, columnspacing=1.3)
+a2.set_title("Small head → a closed-form probe learns from frozen features;\nthe gradient-trained probe and BitFit output a constant", fontsize=9.5, weight="bold", loc="left", color=INK, pad=7)
+h1, l1 = a1.get_legend_handles_labels(); h2, l2 = a2.get_legend_handles_labels()
+a2.legend(h1 + h2, l1 + l2, ncol=5, handletextpad=0.4, fontsize=7.8, frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.19), handlelength=1.0, columnspacing=0.9)
 
 # ── footer: three findings ─────────────────────────────────────────────────────
 ft_b, _ = ms("sequential_ft_t243", 2, "dice"); ft_b2, _ = ms("sequential_ft_t243", 2, "dice", "test_after_task4")
@@ -275,9 +278,9 @@ stats = json.load(open(os.path.join(ROOT, "results", "stats_v2.json")))
 ri = {r["label"].split(":")[0]: r["mean"] for r in stats["seg"] if "RI" in r["label"]}
 nruns = len([f for n in ("n16", "n32", "n64", "nfull") for f in glob.glob(os.path.join(ROOT, "outputs", "benchmark_v2", n, "*", "seed*", "results.json")) if "smoke" not in f])
 sgn = lambda v: f"{v:+.3f}".replace("-", "−")
-take = [(ORANGE, "Forgetting is symmetric:", f"a second segmentation task erases the first in either order\n(BraTS {ft_b:.2f}→{ft_b2:.2f}, ISLES {ft_i:.2f}→{ft_i2:.2f}); frozen strategies cannot forget."),
-        (BLUE, "Pretraining is task-dependent:", f"ΔDice {sgn(ri['BraTS'])} BraTS, {sgn(ri['ISLES'])} ISLES,\n{sgn(ri['WMH'])} WMH vs random init; run a random-init control."),
-        (AQUA, "Protocol:", f"subject-grouped splits, whole-volume inference,\n5 seeds, {nruns} runs, paired per-case tests with Holm correction.")]
+take = [(ORANGE, "Forgetting:", f"a second segmentation task erases the first in either\norder (BraTS {ft_b:.2f}→{ft_b2:.2f}); EWC softens it, only freezing prevents it."),
+        (BLUE, "Pretraining:", f"59 of 82 tensors load; under LoRA it equals random\ninit on four tasks ({sgn(ri['BraTS'])} Dice on BraTS); frozen features beat random."),
+        (AQUA, "Protocol:", f"subject-grouped splits, whole-volume inference,\n5 seeds, {nruns} runs, seed-level paired tests, per-strategy learning rate.")]
 rbox(PA[0], FOOT0, PC[1] - PA[0], FOOT1 - FOOT0, ec=PANEL_EC, lw=1.4, r=0.12)
 cw = (PC[1] - PA[0]) / 3
 fig.canvas.draw()
