@@ -156,6 +156,11 @@ def task_patch(args, task_id):
     return (int(args.patch_overrides.get(task_id, args.patch_size)),) * 3
 
 
+def task_lr(args, task_id):
+    """Learning rate for a task: --lrs T:LR overrides --lr."""
+    return float(getattr(args, "lr_overrides", {}).get(task_id, args.lr))
+
+
 def task_eval_bs(args, task_id):
     """Whole-head 96^3 windows are evaluated two at a time, as in every earlier whole-head run."""
     return args.eval_batch_size if task_patch(args, task_id)[0] <= 64 else min(args.eval_batch_size, 2)
@@ -307,7 +312,8 @@ def run(args):
 
         t0 = time.perf_counter()
         common = dict(task_id=task_id, task_type=cfg["task_type"], device=device,
-                      epochs=args.epochs, lr=args.lr, save_dir=str(out_dir / f"task{task_id}"))
+                      epochs=args.epochs, lr=task_lr(args, task_id),
+                      save_dir=str(out_dir / f"task{task_id}"))
         lwf_targets, rehearsal = None, None
         if args.method in ("lwf_out", "replay_label") and cl_state["task_models"]:
             import copy
@@ -488,6 +494,9 @@ def main():
     ap.add_argument("--patch_size", type=int, default=64)
     ap.add_argument("--patch_sizes", nargs="*", default=[],
                     help="per-task overrides T:P, e.g. 2:64 5:96 for BraTS then whole-head brain age")
+    ap.add_argument("--lrs", nargs="*", default=[],
+                    help="per-task learning-rate overrides T:LR, e.g. 2:1e-4 5:3e-4, so a sequence can "
+                         "run each task at the rate the strategy chose on validation for that task")
     ap.add_argument("--init_first_from", default="",
                     help="run directory (without seed) whose first-task checkpoint and test results "
                          "seed the sequence, e.g. outputs/benchmark_v2/n32/sequential_ft")
@@ -510,6 +519,7 @@ def main():
     ap.add_argument("--replay_capacity", type=int, default=100)
     args = ap.parse_args()
     args.patch_overrides = {int(k): int(v) for k, v in (t.split(":") for t in args.patch_sizes)}
+    args.lr_overrides = {int(k): float(v) for k, v in (t.split(":") for t in args.lrs)}
     if args.pretrained_path is None:
         args.pretrained_path = DEFAULT_WEIGHTS[args.backbone]
 
