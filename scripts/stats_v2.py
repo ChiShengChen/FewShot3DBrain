@@ -103,21 +103,47 @@ def seed_values(kind, cfgA, cfgB, task, n="n32", seeds=SEEDS):
     return per_seed, np.asarray(pooled, float)
 
 
-def summarise(per_seed, pooled):
+# Equivalence margins for the two one-sided tests (TOST), in the units of each kind. 0.02
+# Dice / AUC is below the smallest between-method difference the study treats as practically
+# relevant; 1 year of absolute error likewise. They were fixed before the TOST results were seen.
+MARGINS = {"dice": 0.02, "auc": 0.02, "bwt": 0.02, "abserr": 1.0, "const": 1.0}
+# Kinds in which a positive A - B favours A; for the error kinds a negative value favours A.
+POSITIVE_FAVOURS_A = {"dice": True, "auc": True, "bwt": True, "abserr": False, "const": False}
+
+
+def summarise(per_seed, pooled, kind=None):
     if not per_seed:
         return None
     ds = np.array([d for _, d, _ in per_seed])
     n = ds.size
     mean, sd = float(ds.mean()), float(ds.std(ddof=1)) if n > 1 else 0.0
+    tost_p, ci90, ni = float("nan"), [mean, mean], float("nan")
     if n > 1 and sd > 0:
         se = sd / np.sqrt(n)
         tcrit = stats.t.ppf(0.975, n - 1)
         ci = [mean - tcrit * se, mean + tcrit * se]
         p = float(stats.ttest_1samp(ds, 0.0).pvalue)
+        t90 = stats.t.ppf(0.95, n - 1)
+        ci90 = [mean - t90 * se, mean + t90 * se]
+        if kind in MARGINS:
+            m = MARGINS[kind]
+            # TOST: reject "mean <= -m" and "mean >= +m"; equivalence at level 0.05 iff both
+            # one-sided p < 0.05, i.e. the 90% CI lies inside (-m, +m).
+            p_lo = float(stats.t.sf((mean + m) / se, n - 1))
+            p_hi = float(stats.t.sf((m - mean) / se, n - 1))
+            tost_p = max(p_lo, p_hi)
+            # Non-inferiority bound for A: the largest deficit of A relative to B that the
+            # one-sided 95% limit cannot exclude (0 when the limit already favours A).
+            ni = max(0.0, -(mean - t90 * se)) if POSITIVE_FAVOURS_A[kind] else max(0.0, mean + t90 * se)
     else:  # identical per-seed values (e.g. a method that is constant on every seed)
         ci = [mean, mean]
         p = 1.0 if abs(mean) < 1e-12 else 0.0
+        if kind in MARGINS:
+            tost_p = 0.0 if abs(mean) < MARGINS[kind] else 1.0
+            ni = max(0.0, -mean) if POSITIVE_FAVOURS_A[kind] else max(0.0, mean)
     out = {"mean": mean, "sd_seeds": sd, "ci": [float(ci[0]), float(ci[1])], "p": p,
+           "ci90": [float(ci90[0]), float(ci90[1])], "tost_margin": MARGINS.get(kind), "tost_p": tost_p,
+           "A_worse_by_at_most": ni,
            "n_seeds": int(n), "seeds_favouring_A": int((ds > 0).sum()), "seeds_against_A": int((ds < 0).sum()),
            "per_seed": {str(s): d for s, d, _ in per_seed}, "n_cases": int(sum(c for _, _, c in per_seed))}
     if pooled.size:
@@ -217,9 +243,38 @@ FAMILIES = {
         ("OASIS sex: MLP head $-$ L+h$_{16}$", "auc", "mlp_head_t10", L16 + "_t10", 10),
         ("OASIS sex: partial FT $-$ L+h$_{16}$", "auc", "partial_ft_t10", L16 + "_t10", 10),
     ],
+    "proj": [  # the 66-parameter output projection: LoRA enc+dec with it trained minus frozen, r=16
+        ("BraTS: L+h$_{16}$ $-$ L$_{16}$", "dice", L16, "lora_r16_t2", 2),
+        ("ISLES: L+h$_{16}$ $-$ L$_{16}$", "dice", L16 + "_t4", "lora_r16_t4", 4),
+        ("Hippocampus: L+h$_{16}$ $-$ L$_{16}$", "dice", L16 + "_t7", "lora_r16_t7", 7),
+        ("WMH: L+h$_{16}$ $-$ L$_{16}$", "dice", L16 + "_t8", "lora_r16_t8", 8),
+    ],
+    "headfit": [  # the closed-form probe minus the gradient-trained probe on the same frozen features
+        ("IXI age: closed-form $-$ gradient probe", "abserr", "ridge_probe_t5", SL + "_t5", 5),
+        ("OASIS age: closed-form $-$ gradient probe", "abserr", "ridge_probe_t9", SL + "_t9", 9),
+        ("IXI sex: closed-form $-$ gradient probe", "auc", "ridge_probe_t6", SL + "_t6", 6),
+        ("OASIS sex: closed-form $-$ gradient probe", "auc", "ridge_probe_t10", SL + "_t10", 10),
+    ],
+    "scratch": [  # trained from scratch on the same 32 cases: nnU-Net (250 epochs) and the study's U-Net
+        ("BraTS: SL $-$ nnU-Net", "dice", SL, "nnunet_t2", 2),
+        ("ISLES: SL $-$ nnU-Net", "dice", SL + "_t4", "nnunet_t4", 4),
+        ("Hippocampus: SL $-$ nnU-Net", "dice", SL + "_t7", "nnunet_t7", 7),
+        ("WMH: SL $-$ nnU-Net", "dice", SL + "_t8", "nnunet_t8", 8),
+        ("BraTS: FT $-$ nnU-Net", "dice", FT, "nnunet_t2", 2),
+        ("ISLES: FT $-$ nnU-Net", "dice", FT + "_t4", "nnunet_t4", 4),
+        ("Hippocampus: FT $-$ nnU-Net", "dice", FT + "_t7", "nnunet_t7", 7),
+        ("WMH: FT $-$ nnU-Net", "dice", FT + "_t8", "nnunet_t8", 8),
+    ],
+    "forget_ownlr": [  # the BraTS -> IXI-age sequence at full fine-tuning's own per-task rates
+        ("FT, own rates $-$ FT, shared rate", "bwt", FT + "_t25_ownlr", FT + "_t25", 2),
+        ("EWC ($\\lambda{=}10^2$) $-$ FT, both at own rates", "bwt", "ewc_t25_ownlr_ewc100", FT + "_t25_ownlr", 2),
+    ],
     "pretrain": [  # pretrained checkpoint minus random initialisation, same configuration
         ("BraTS, probe: pretrained $-$ random", "dice", SL, SL + "_t2_randinit", 2),
         ("BraTS, full FT: pretrained $-$ random", "dice", FT, FT + "_t2_randinit", 2),
+        ("ISLES, full FT: pretrained $-$ random", "dice", FT + "_t4", FT + "_t4_randinit", 4),
+        ("Hippocampus, full FT: pretrained $-$ random", "dice", FT + "_t7", FT + "_t7_randinit", 7),
+        ("WMH, full FT: pretrained $-$ random", "dice", FT + "_t8", FT + "_t8_randinit", 8),
         ("IXI age, full FT: pretrained $-$ random", "abserr", FT + "_t5", FT + "_t5_randinit", 5),
         ("IXI age, ridge: pretrained $-$ random", "abserr", "ridge_probe_t5", "ridge_probe_t5_randinit", 5),
         ("IXI sex, ridge: pretrained $-$ random", "auc", "ridge_probe_t6", "ridge_probe_t6_randinit", 6),
@@ -264,7 +319,7 @@ def main():
         res = []
         for label, kind, a, b, task in rows:
             per_seed, pooled = seed_values(kind, a, b, task, seeds=(42, 43, 44) if fam == "swin" else SEEDS)
-            s = summarise(per_seed, pooled)
+            s = summarise(per_seed, pooled, kind)
             if s is None:
                 print(f"  [{fam}] {label}: no data", flush=True)
                 continue
@@ -275,7 +330,8 @@ def main():
             r["p_holm"] = float(pa)
             pc = r.get("percase", {})
             print(f"  [{fam}] {r['label']:40s} Δ={r['mean']:+.4f} CI=[{r['ci'][0]:+.4f},{r['ci'][1]:+.4f}] "
-                  f"p={r['p']:.3f} holm={r['p_holm']:.3f} sign={r['seeds_favouring_A']}/{r['n_seeds']}"
+                  f"p={r['p']:.3f} holm={r['p_holm']:.3f} sign={r['seeds_favouring_A']}/{r['n_seeds']} "
+                  f"TOST(±{r['tost_margin']})p={r['tost_p']:.3f} A_worse≤{r['A_worse_by_at_most']:.3f}"
                   + (f"  (per-case pooled p={pc['wilcoxon_p']:.1e}, n={pc['n']})" if pc else ""), flush=True)
         out[fam] = res
 
@@ -288,6 +344,15 @@ def main():
             sign = f"{r['seeds_favouring_A']}/{r['n_seeds']}"
             lines.append(f"{r['label']} & ${r['mean']:+.{d}f}$ & {ci} & {rng} & ${fmt_p(r['p'])}$ & ${fmt_p(r['p_holm'])}$ & {sign} \\\\")
         (Path(args.tab_dir) / f"paired_{fam}.tex").write_text("\n".join(lines) + "\n")
+        # Equivalence / non-inferiority view of the same contrasts: 90% CI, TOST p at the
+        # pre-set margin, and the deficit of A the one-sided 95% limit cannot exclude.
+        lines = []
+        for r in res:
+            d = DECIMALS[r["kind"]]
+            ci90 = f"$[{r['ci90'][0]:+.{d}f},\\,{r['ci90'][1]:+.{d}f}]$"
+            verdict = "equiv." if r["tost_p"] < 0.05 else "incon."
+            lines.append(f"{r['label']} & ${r['mean']:+.{d}f}$ & {ci90} & ${fmt_p(r['tost_p'])}$ & {verdict} & ${r['A_worse_by_at_most']:.{d}f}$ \\\\")
+        (Path(args.tab_dir) / f"tost_{fam}.tex").write_text("\n".join(lines) + "\n")
 
     json.dump(out, open(args.out_json, "w"), indent=1)
     print(f"wrote {args.out_json} and {args.tab_dir}/paired_*.tex")
