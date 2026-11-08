@@ -31,7 +31,7 @@
     "n": 1366,
     "wilcoxon_p": 6.252749943042175e-06
    },
-   "label": "BraTS: L+h$_{16}$ $-$ SL",
+   "label": "BraTS: L+h$_{16}$ $-$ HT",
    "kind": "dice",
    "A": "lora_head_r16",
    "B": "sequential_linear",
@@ -259,7 +259,7 @@
     "n": 775,
     "wilcoxon_p": 4.310063370131377e-31
    },
-   "label": "ISLES: SL $-$ L+h$_{16}$",
+   "label": "ISLES: HT $-$ L+h$_{16}$",
    "kind": "dice",
    "A": "sequential_linear_t4",
    "B": "lora_head_r16_t4",
@@ -449,7 +449,7 @@
     "n": 840,
     "wilcoxon_p": 1.9878972807718563e-70
    },
-   "label": "Hippocampus: SL $-$ L+h$_{16}$",
+   "label": "Hippocampus: HT $-$ L+h$_{16}$",
    "kind": "dice",
    "A": "sequential_linear_t7",
    "B": "lora_head_r16_t7",
@@ -601,7 +601,7 @@
     "n": 390,
     "wilcoxon_p": 0.0820605435727957
    },
-   "label": "WMH: SL $-$ L+h$_{16}$",
+   "label": "WMH: HT $-$ L+h$_{16}$",
    "kind": "dice",
    "A": "sequential_linear_t8",
    "B": "lora_head_r16_t8",
@@ -1089,7 +1089,7 @@
     "46": 0.1622988505747126
    },
    "n_cases": 5,
-   "label": "IXI sex: L+h$_{16}$ $-$ SL",
+   "label": "IXI sex: L+h$_{16}$ $-$ HT",
    "kind": "auc",
    "A": "lora_head_r16_t6",
    "B": "sequential_linear_t6",
@@ -1221,7 +1221,7 @@
     "46": 0.16039279869067102
    },
    "n_cases": 5,
-   "label": "OASIS sex: L+h$_{16}$ $-$ SL",
+   "label": "OASIS sex: L+h$_{16}$ $-$ HT",
    "kind": "auc",
    "A": "lora_head_r16_t10",
    "B": "sequential_linear_t10",
@@ -2791,7 +2791,7 @@
     "n": 820,
     "wilcoxon_p": 0.6713970041363881
    },
-   "label": "BraTS (Swin): L+h$_{16}$ $-$ SL",
+   "label": "BraTS (Swin): L+h$_{16}$ $-$ HT",
    "kind": "dice",
    "A": "swin_lora_head_r16_t2",
    "B": "swin_sequential_linear_t2",
@@ -2930,7 +2930,7 @@
     "44": 0.16375131027253664
    },
    "n_cases": 3,
-   "label": "IXI sex (Swin): L+h$_{16}$ $-$ SL",
+   "label": "IXI sex (Swin): L+h$_{16}$ $-$ HT",
    "kind": "auc",
    "A": "swin_lora_head_r16_t6",
    "B": "swin_sequential_linear_t6",

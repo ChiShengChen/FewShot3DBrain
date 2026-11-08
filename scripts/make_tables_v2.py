@@ -83,8 +83,8 @@ def main():
 
     # ---- tab:main -------------------------------------------------------------
     rows = [("BitFit", "bitfit"), ("LoRA (enc+dec), $r{=}8$", "lora"), ("LoRA + head, $r{=}4$", "lora_head_r4"),
-            ("LoRA + head, $r{=}8$", "lora_head"), ("LoRA + head, $r{=}16$", "lora_head_r16"), ("Sequential Linear", "sequential_linear")]
-    seq = [("Sequential FT", "sequential_ft"), ("EWC", "ewc"), ("LwF", "lwf"), ("Replay", "replay")]
+            ("LoRA + head, $r{=}8$", "lora_head"), ("LoRA + head, $r{=}16$", "lora_head_r16"), ("Head tuning", "sequential_linear")]
+    seq = [("Full FT", "sequential_ft"), ("EWC", "ewc"), ("LwF", "lwf"), ("Replay", "replay")]
     L = []
     L.append("\\multicolumn{8}{l}{\\emph{Frozen backbone (task-isolated; BWT $=0$ by construction)}} \\\\")
     for lab, c in rows:
@@ -110,14 +110,14 @@ def main():
 
     # ---- tab:shot ----------------------------------------------------------------
     L = []
-    for lab, c in (("LoRA + head, $r{=}16$", "lora_head_r16"), ("Sequential Linear", "sequential_linear")):
+    for lab, c in (("LoRA + head, $r{=}16$", "lora_head_r16"), ("Head tuning", "sequential_linear")):
         L.append(f"{lab:22s} & " + " & ".join(ms(vals(n, c, 2, "dice")) for n in ("n16", "n32", "n64")) + " \\\\")
     (TAB / "shot_body.tex").write_text("\n".join(L) + "\n")
 
     # ---- tab:age (IXI whole head vs patch) ---------------------------------------
     L = []
-    for lab, c5, c3 in (("LoRA + head, $r{=}16$", "lora_head_r16_t5", "lora_head_r16"), ("Sequential FT", "sequential_ft_t5", "sequential_ft"),
-                        ("Sequential Linear", "sequential_linear_t5", "sequential_linear"), ("BitFit", "bitfit_t5", "bitfit")):
+    for lab, c5, c3 in (("LoRA + head, $r{=}16$", "lora_head_r16_t5", "lora_head_r16"), ("Full FT", "sequential_ft_t5", "sequential_ft"),
+                        ("Head tuning", "sequential_linear_t5", "sequential_linear"), ("BitFit", "bitfit_t5", "bitfit")):
         b = c5 == "lora_head_r16_t5"
         L.append(f"{lab:22s} & {ms(vals('n32', c5, 5, 'mae'), 2, b)} & {ms(vals('n32', c5, 5, 'r2'), 2, b).replace('$', '$+', 1) if vals('n32', c5, 5, 'r2').mean() >= 0 else ms(vals('n32', c5, 5, 'r2'), 2)} & {m(vals('n32', c5, 5, 'pred_std'))} & {m(vals('n32', c3, 3, 'mae'))} \\\\")
     (TAB / "age_body.tex").write_text("\n".join(L) + "\n")
@@ -164,7 +164,7 @@ def main():
 
     # ---- tab:three (forward, 5 seeds) + reversed (3 seeds) -----------------------
     L = []
-    for lab, c in (("LoRA + head, $r{=}16$", "lora_head_r16_t243"), ("Sequential Linear", "sequential_linear_t243"), ("Sequential FT", "sequential_ft_t243")):
+    for lab, c in (("LoRA + head, $r{=}16$", "lora_head_r16_t243"), ("Head tuning", "sequential_linear_t243"), ("Full FT", "sequential_ft_t243")):
         b2, b4, a3 = vals("n32", c, 2, "dice"), vals("n32", c, 4, "dice"), vals("n32", c, 3, "mae")
         if c.startswith("lora"):
             tail = "= & = & ="
@@ -173,7 +173,7 @@ def main():
         L.append(f"{lab:22s} & {ms(b2)} & {ms(b4)} & {ms(a3, 2)} & {tail} \\\\")
     (TAB / "three_body.tex").write_text("\n".join(L) + "\n")
     L = []
-    for lab, c in (("LoRA + head, $r{=}16$", "lora_head_r16_t342"), ("Sequential FT", "sequential_ft_t342")):
+    for lab, c in (("LoRA + head, $r{=}16$", "lora_head_r16_t342"), ("Full FT", "sequential_ft_t342")):
         a3, b4, b2 = vals("n32", c, 3, "mae"), vals("n32", c, 4, "dice"), vals("n32", c, 2, "dice")
         if c.startswith("lora"):
             tail = "= & = & ="
@@ -184,7 +184,7 @@ def main():
 
     # ---- two-task reversed (age -> BraTS), 3 seeds ------------------------------
     L = []
-    for lab, c in (("Sequential Linear", "sequential_linear_t32"), ("Sequential FT", "sequential_ft_t32"), ("EWC", "ewc_t32"), ("LwF", "lwf_t32"), ("Replay", "replay_t32")):
+    for lab, c in (("Head tuning", "sequential_linear_t32"), ("Full FT", "sequential_ft_t32"), ("EWC", "ewc_t32"), ("LwF", "lwf_t32"), ("Replay", "replay_t32")):
         a, aa, b = vals("n32", c, 3, "mae"), vals("n32", c, 3, "mae", "test_after_task2"), vals("n32", c, 2, "dice")
         L.append(f"{lab:18s} & {ms(a, 2)} & {ms(aa, 2)} & {ms(b)} \\\\")
     (TAB / "two_rev_body.tex").write_text("\n".join(L) + "\n")
@@ -222,8 +222,8 @@ def main():
         (2, "dice", 3, None, True, "", "_t2"),
         (5, "mae", 2, "pred_std", False, "_t5", "_t5"),
         (6, "auc", 3, "balanced_acc", True, "_t6", "_t6"))
-    strategies = (("LoRA + head ($r{=}16$)", "lora_head_r16"), ("Sequential Linear", "sequential_linear"),
-                  ("Sequential FT", "sequential_ft"), ("BitFit", "bitfit"))
+    strategies = (("LoRA + head ($r{=}16$)", "lora_head_r16"), ("Head tuning", "sequential_linear"),
+                  ("Full FT", "sequential_ft"), ("BitFit", "bitfit"))
     best = {}
     for task, metric, d, ck, hi, su, ss in cols:
         for bb, suf in (("", su), ("swin_", ss)):
@@ -324,7 +324,7 @@ def main():
 
     # ---- tab:forget25: BraTS -> whole-head IXI brain age (a learnable second task) ---
     L = []
-    for lab, c in (("Sequential FT", "sequential_ft_t25"), ("EWC, $\\lambda{=}10^2$", "ewc_t25_ewc100"),
+    for lab, c in (("Full FT", "sequential_ft_t25"), ("EWC, $\\lambda{=}10^2$", "ewc_t25_ewc100"),
                    ("EWC, $\\lambda{=}10^3$", "ewc_t25"), ("EWC, $\\lambda{=}10^4$", "ewc_t25_ewc10000"),
                    ("LwF (feature distillation)", "lwf_t25"), ("LwF (output distillation)", "lwf_out_t25"),
                    ("Replay (feature distillation)", "replay_t25"), ("Replay (labelled rehearsal)", "replay_label_t25")):
