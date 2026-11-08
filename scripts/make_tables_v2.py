@@ -61,9 +61,13 @@ def const_cell(v, d, k, n, best=False):
     """Mean +/- SD, or the mean marked const. when every seed is constant, or the count of
     constant seeds when only some are."""
     if n and k == n:
-        return f"{v.mean():.{d}f} (const.)"
+        return f"{v.mean():.{d}f}$^{{\\mathrm{{c}}}}$"
     s = ms(v, d, best)
-    return s + (f" (const.\ {k}/{n})" if k else "")
+    if not k:
+        return s
+    # superscript c k/n inside the closing math of ms(): "$...$" -> "$...^{c k/n}$"
+    assert s.endswith("$")
+    return s[:-1] + f"^{{\\mathrm{{c}}\\,{k}/{n}}}$"
 
 
 def trainable(n, cfg, task):
@@ -132,7 +136,7 @@ def main():
             ("T1 BraTS glioma", "seg, 3\\,ch", 2, "dice", 3, {"L": "lora_head_r16", "SL": "sequential_linear", "FT": "sequential_ft", "BF": "bitfit", "AD": "adapter", "RI": "lora_head_r16_randinit"}),
             ("T3 ISLES stroke", "seg, 3\\,ch", 4, "dice", 3, {"L": "lora_head_r16_t4", "SL": "sequential_linear_t4", "FT": "sequential_ft_t4", "BF": "bitfit_t4", "AD": "adapter_t4", "RI": "lora_head_r16_t4_randinit"}),
             ("T4 MSD hippocampus", "seg, 1\\,ch", 7, "dice", 3, {"L": "lora_head_r16_t7", "SL": "sequential_linear_t7", "FT": "sequential_ft_t7", "BF": "bitfit_t7", "AD": "adapter_t7", "RI": "lora_head_r16_t7_randinit"}),
-            ("T6 WMH 2017", "seg, 2\\,ch, 5 scanners", 8, "dice", 3, {"L": "lora_head_r16_t8", "SL": "sequential_linear_t8", "FT": "sequential_ft_t8", "BF": "bitfit_t8", "AD": "adapter_t8", "RI": "lora_head_r16_t8_randinit"}),
+            ("T6 WMH 2017", "seg, 2\\,ch", 8, "dice", 3, {"L": "lora_head_r16_t8", "SL": "sequential_linear_t8", "FT": "sequential_ft_t8", "BF": "bitfit_t8", "AD": "adapter_t8", "RI": "lora_head_r16_t8_randinit"}),
         ]),
         ("\\emph{Tasks with only a $\\sim$1K-parameter head}", [
             ("T2 IXI brain age", "reg, MAE yr$\\downarrow$", 5, "mae", 2, {"L": "lora_head_r16_t5", "SL": "sequential_linear_t5", "FT": "sequential_ft_t5", "BF": "bitfit_t5", "AD": "adapter_t5", "RI": "lora_head_r16_t5_randinit"}),

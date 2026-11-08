@@ -2,11 +2,11 @@
 T1 BraTS glioma        & seg, 3\,ch & $0.772\pm0.011$ & $0.782\pm0.032$ & $\mathbf{0.787\pm0.028}$ & $0.436\pm0.031$ & $0.755\pm0.046$ & $0.772\pm0.029$ \\
 T3 ISLES stroke        & seg, 3\,ch & $\mathbf{0.466\pm0.053}$ & $0.417\pm0.032$ & $0.409\pm0.057$ & $0.105\pm0.074$ & $0.363\pm0.048$ & $0.496\pm0.022$ \\
 T4 MSD hippocampus     & seg, 1\,ch & $0.873\pm0.002$ & $0.884\pm0.002$ & $\mathbf{0.898\pm0.001}$ & $0.365\pm0.071$ & $0.875\pm0.002$ & $0.871\pm0.002$ \\
-T6 WMH 2017            & seg, 2\,ch, 5 scanners & $0.522\pm0.027$ & $0.537\pm0.036$ & $\mathbf{0.630\pm0.027}$ & $0.083\pm0.067$ & $0.525\pm0.037$ & $0.499\pm0.067$ \\
+T6 WMH 2017            & seg, 2\,ch & $0.522\pm0.027$ & $0.537\pm0.036$ & $\mathbf{0.630\pm0.027}$ & $0.083\pm0.067$ & $0.525\pm0.037$ & $0.499\pm0.067$ \\
 \midrule
 \multicolumn{8}{l}{\emph{Tasks with only a $\sim$1K-parameter head}} \\
-T2 IXI brain age       & reg, MAE yr$\downarrow$ & $\mathbf{10.99\pm1.27}$ & 14.68 (const.) & $12.67\pm0.69$ & 14.67 (const.) & $11.48\pm2.15$ & $10.99\pm0.75$ \\
-T7 OASIS brain age     & reg, MAE yr$\downarrow$ & $11.95\pm0.68$ & 22.96 (const.) & $12.00\pm1.01$ & 23.01 (const.) & $\mathbf{9.68\pm1.08}$ & $13.10\pm1.22$ \\
-T5 IXI sex             & cls, AUC$\uparrow$ & $0.878\pm0.079$ & 0.702 (const.) & $0.814\pm0.047$ (const.\ 1/5) & $0.737\pm0.111$ (const.\ 4/5) & $\mathbf{0.903\pm0.070}$ (const.\ 1/5) & $0.847\pm0.061$ (const.\ 2/5) \\
-T8 OASIS sex           & cls, AUC$\uparrow$ & $\mathbf{0.920\pm0.035}$ (const.\ 1/5) & $0.731\pm0.062$ (const.\ 4/5) & $0.856\pm0.090$ & 0.752 (const.) & $0.915\pm0.030$ & $0.879\pm0.048$ (const.\ 2/5) \\
-T9 OASIS CDR$>$0       & cls, AUC$\uparrow$ & $\mathbf{0.518\pm0.049}$ (const.\ 2/5) & 0.416 (const.) & $0.560\pm0.068$ (const.\ 3/5) & 0.421 (const.) & $0.456\pm0.062$ (const.\ 4/5) & $0.533\pm0.049$ (const.\ 4/5) \\
+T2 IXI brain age       & reg, MAE yr$\downarrow$ & $\mathbf{10.99\pm1.27}$ & 14.68$^{\mathrm{c}}$ & $12.67\pm0.69$ & 14.67$^{\mathrm{c}}$ & $11.48\pm2.15$ & $10.99\pm0.75$ \\
+T7 OASIS brain age     & reg, MAE yr$\downarrow$ & $11.95\pm0.68$ & 22.96$^{\mathrm{c}}$ & $12.00\pm1.01$ & 23.01$^{\mathrm{c}}$ & $\mathbf{9.68\pm1.08}$ & $13.10\pm1.22$ \\
+T5 IXI sex             & cls, AUC$\uparrow$ & $0.878\pm0.079$ & 0.702$^{\mathrm{c}}$ & $0.814\pm0.047^{\mathrm{c}\,1/5}$ & $0.737\pm0.111^{\mathrm{c}\,4/5}$ & $\mathbf{0.903\pm0.070}^{\mathrm{c}\,1/5}$ & $0.847\pm0.061^{\mathrm{c}\,2/5}$ \\
+T8 OASIS sex           & cls, AUC$\uparrow$ & $\mathbf{0.920\pm0.035}^{\mathrm{c}\,1/5}$ & $0.731\pm0.062^{\mathrm{c}\,4/5}$ & $0.856\pm0.090$ & 0.752$^{\mathrm{c}}$ & $0.915\pm0.030$ & $0.879\pm0.048^{\mathrm{c}\,2/5}$ \\
+T9 OASIS CDR$>$0       & cls, AUC$\uparrow$ & $\mathbf{0.518\pm0.049}^{\mathrm{c}\,2/5}$ & 0.416$^{\mathrm{c}}$ & $0.560\pm0.068^{\mathrm{c}\,3/5}$ & 0.421$^{\mathrm{c}}$ & $0.456\pm0.062^{\mathrm{c}\,4/5}$ & $0.533\pm0.049^{\mathrm{c}\,4/5}$ \\

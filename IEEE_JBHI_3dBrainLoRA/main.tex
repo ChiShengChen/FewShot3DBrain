@@ -503,20 +503,21 @@ The two findings above each rested on a single task and a single cohort. Table~\
 \end{figure*}
 
 \begin{table*}[t]
-\caption{All nine tasks, $N_k=32$, mean $\pm$ SD over seeds 42--46. Segmentation reports Dice$\uparrow$; brain age MAE in years$\downarrow$; classification AUC$\uparrow$. ``const.'' marks a method whose output does not vary with the input (prediction SD $<0.5$\,yr for brain age; balanced accuracy within 0.02 of 0.500 for classification). RI = LoRA + head on a randomly initialised backbone (Sec.~\ref{sec:res_pretrain}). All ISLES entries are single-task runs. Adapter = Houlsby-style bottleneck adapters at LoRA's budget (Sec.~\ref{sec:baselines}). Trainable counts for the global tasks are for classification and include its 1,026-parameter head. Bold: best of the five strategies.}
+\caption{All nine tasks, $N_k=32$, mean $\pm$ SD over seeds 42--46; LoRA rank $r{=}16$. Segmentation reports Dice$\uparrow$; brain age MAE in years$\downarrow$; classification AUC$\uparrow$. Superscript c marks a method whose output does not vary with the input (prediction SD $<0.5$\,yr for brain age; balanced accuracy within 0.02 of 0.500 for classification) on every seed; c\,$k$/5 marks $k$ of the five seeds. RI = LoRA + head on a randomly initialised backbone (Sec.~\ref{sec:res_pretrain}). All ISLES entries are single-task runs. Adapter = Houlsby-style bottleneck adapters at LoRA's budget (Sec.~\ref{sec:baselines}). Trainable counts for the global tasks are for classification and include its 1,026-parameter head. Bold: best of the five strategies.}
 \label{tab:all}
 \centering
-\footnotesize
-\setlength{\tabcolsep}{2.5pt}
+\scriptsize
+\setlength{\tabcolsep}{1.8pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{llcccccc}
 \toprule
-Task & Type & LoRA + head, $r{=}16$ & Sequential Linear & Sequential FT & BitFit & Adapter & RI \\
+Task & Type & LoRA + head & Seq.\ Linear & Seq.\ FT & BitFit & Adapter & RI \\
 \midrule
 \tabinput{tables/all_tasks_body.tex}
 \midrule
 Trainable (seg / global) & & 93.8K / 56.4K & 8.45M / 1.0K & 22.6M / 14.1M & 6.4K / 5.0K & 97.5K / 66.7K & 93.8K / 56.4K \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table*}
 
 \subsection{Head Size or Task Type? Breaking the Confound}
@@ -533,7 +534,7 @@ The nine tasks confound head size with output type: every large-head task is seg
 \fullonly{What the controls leave standing is narrower than the rule stated above. Segmentation needs its decoder trained and nothing more, and no strategy that trains only a small head can do it. The global tasks are learnable from frozen features once the head is fitted properly; moving the encoder is worth about 3.5\,yr and 0.08 AUC on the harder cohort and nothing measurable on the easier one. Full fine-tuning, given its own learning rate, is the most accurate single-task strategy on segmentation and sex, and its disadvantage is forgetting (Sec.~\ref{sec:res_forgetting}), not accuracy.}{What the controls leave standing is narrower than the rule stated above: segmentation needs its decoder trained and nothing more; the global tasks are learnable from frozen features once the head is fitted properly, and moving the encoder pays only on the harder cohort; and full fine-tuning at its own rate is the most accurate single-task strategy, its disadvantage being forgetting (Sec.~\ref{sec:res_forgetting}).}
 
 \begin{table*}[t]
-\caption{Control arms that separate head size from task type, $N_k=32$, mean $\pm$ SD over seeds 42--46. ``Small head'': for segmentation the frozen encoder and decoder with only the 66-parameter output projection trained; for the global tasks the 513-parameter head fitted in closed form (ridge or logistic regression on z-scored frozen features, penalty chosen on validation). ``Large head'': for segmentation the full decoder trained on the frozen encoder (Sequential Linear); for the global tasks a two-layer MLP head (131K parameters) trained by gradient descent. ``Partial FT'': the deepest encoder stage and everything downstream. ``const.'' as in Table~\ref{tab:all}.}
+\caption{Control arms that separate head size from task type, $N_k=32$, mean $\pm$ SD over seeds 42--46. ``Small head'': for segmentation the frozen encoder and decoder with only the 66-parameter output projection trained; for the global tasks the 513-parameter head fitted in closed form (ridge or logistic regression on z-scored frozen features, penalty chosen on validation). ``Large head'': for segmentation the full decoder trained on the frozen encoder (Sequential Linear); for the global tasks a two-layer MLP head (131K parameters) trained by gradient descent. ``Partial FT'': the deepest encoder stage and everything downstream. Superscript c as in Table~\ref{tab:all}.}
 \label{tab:controls}
 \centering
 \footnotesize
@@ -617,7 +618,7 @@ The small-head half transfers for classification and not for regression. On IXI 
 \fullonly{What the replication establishes is the segmentation half: on either backbone, training the inherited decoder is as accurate as LoRA. On the global tasks it mainly shows how recipe-dependent the small-head results are, which Sec.~\ref{sec:res_controls} then explains; the closed-form probe was not run on the Swin features.}{The replication establishes the segmentation half on a second backbone; on the global tasks it mainly shows how recipe-dependent the small-head results are (Sec.~\ref{sec:res_controls}).}
 
 \begin{table*}[t]
-\caption{Second backbone: the four strategies that define the decision rule on the FOMO 3D U-Net and on a Swin UNETR with a self-supervised transformer encoder, $N_k=32$, mean $\pm$ SD over seeds 42--44 on both backbones (so the U-Net columns differ slightly from Table~\ref{tab:all}). ``const.'' as in Table~\ref{tab:all}. Trainable parameters, U-Net / Swin, segmentation and whole head (whole-head counts are for brain age and include the pooled head): LoRA 93.8K / 618K and 55.8K / 485K; Sequential Linear 8.4M / 54.1M and 0.5K / 0.8K; Sequential FT 22.6M / 62.2M and 14.1M / 8.1M; BitFit 6.4K / 21.7K and 4.5K / 22.4K. Bold: best per column.}
+\caption{Second backbone: the four strategies that define the decision rule on the FOMO 3D U-Net and on a Swin UNETR with a self-supervised transformer encoder, $N_k=32$, mean $\pm$ SD over seeds 42--44 on both backbones (so the U-Net columns differ slightly from Table~\ref{tab:all}). Superscript c as in Table~\ref{tab:all}. Trainable parameters, U-Net / Swin, segmentation and whole head (whole-head counts are for brain age and include the pooled head): LoRA 93.8K / 618K and 55.8K / 485K; Sequential Linear 8.4M / 54.1M and 0.5K / 0.8K; Sequential FT 22.6M / 62.2M and 14.1M / 8.1M; BitFit 6.4K / 21.7K and 4.5K / 22.4K. Bold: best per column.}
 \label{tab:swin}
 \centering
 \footnotesize
