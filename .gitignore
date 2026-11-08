@@ -79,3 +79,9 @@ data/splits_v2/
 outputs/benchmark_v2/
 outputs/benchmark_v2/.submitted.tsv
 release_assets/
+
+# nnU-Net reference baseline (scripts/nnunet_baseline.py)
+.nnunet_env/
+data/nnunet_raw/
+data/nnunet_preprocessed/
+outputs/nnunet_results/
