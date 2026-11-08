@@ -20,7 +20,7 @@
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \iffull\markboth{Preprint}{Chen \MakeLowercase{\textit{et al.}}: Fit the Head First}\else
 \markboth{\hskip25pc IEEE JOURNAL OF BIOMEDICAL AND HEALTH INFORMATICS}
-{Chen \MakeLowercase{\textit{et al.}}: Which Adaptation Strategy for a New Task?}\fi
+{Chen \MakeLowercase{\textit{et al.}}: Fit the Head First}\fi
 \begin{document}
 \title{Fit the Head First: A Controlled Comparison of\iffull{} \else\\\fi Parameter-Efficient and Continual Adaptation of a 3D Brain-MRI Backbone from 32 Cases}
 
@@ -73,7 +73,7 @@ Clinical model deployment, few-shot learning, continual learning, parameter-effi
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/teaser_gen_v4.png}
-\caption{Overview. (a)~Nine brain-MRI tasks from six cohorts, each learned from 32 labelled volumes, grouped by whether the task inherits a large task-specific head (the U-Net decoder) or only a $\sim$1K-parameter head over pooled encoder features; one held-out test slice per task, segmentation targets in red. (b)~Four of the eleven strategies compared, the ones that define the decision rule, drawn as what each freezes (snowflake) and trains (flame) in the same frozen FOMO 3D U-Net: LoRA + head adds low-rank branches to every convolution and trains the output projection; head tuning trains everything downstream of the encoder; BitFit trains bias terms and the head; full fine-tuning trains all 22.6\,M parameters. The 66-parameter output projection is trained in every strategy; leaving it frozen is the single largest source of error we observed (Sec.~\ref{sec:res_head}). (c)~The four strategies at $N_k=32$, mean $\pm$ SD over five seeds, at the shared learning rate: with a large head, training it on the frozen encoder is not led by LoRA on any task (equivalent on hippocampus, LoRA's advantage bounded by 0.04 Dice on BraTS and WMH, ISLES undecided; Table~\ref{tab:tost}) and BitFit collapses; with a small head, LoRA learns while the gradient-trained linear probe and BitFit return a constant output, a failure that Sec.~\ref{sec:res_controls} traces to the optimiser rather than the features, since the same head fitted in closed form (red) learns. Footer: the three further findings of the paper. Seed-level paired tests for every contrast are in Tables~\ref{tab:paired} and~\ref{tab:paired_global}.}
+\caption{Overview. (a)~Nine brain-MRI tasks from six cohorts, each learned from 32 labelled volumes, grouped by whether the task inherits a large task-specific head (the U-Net decoder) or only a $\sim$1K-parameter head over pooled encoder features; one held-out test slice per task, segmentation targets in red. (b)~Four of the eleven strategies compared, the ones that define the decision rule, drawn as what each freezes (snowflake) and trains (flame) in the same frozen FOMO 3D U-Net: LoRA + head adds low-rank branches to every convolution and trains the output projection; head tuning trains everything downstream of the encoder; BitFit trains bias terms and the head; full fine-tuning trains all 22.6\,M parameters. The 66-parameter output projection is trained in every strategy; leaving it frozen is the single largest source of error we observed (Sec.~\ref{sec:res_head}). (c)~The four strategies at $N_k=32$, mean $\pm$ SD over five seeds, at the shared learning rate: with a large head, training it on the frozen encoder is not led by LoRA on any task (equivalent on hippocampus, LoRA's advantage bounded by 0.04 Dice on BraTS and WMH, ISLES undecided; Table~\ref{tab:tost}) and BitFit collapses; with a small head, LoRA learns while the gradient-trained linear probe and BitFit return a constant output, a failure that Sec.~\ref{sec:res_controls} traces to the optimiser rather than the features, since the same head fitted in closed form (red) learns. Footer: the three further findings of the paper. Seed-level paired tests for every contrast are in Table~\ref{tab:paired}\fullonly{ and Table~\ref{tab:paired_global}}{ and the released statistics}.}
 \label{fig:framework}
 \end{figure*}
 
@@ -133,46 +133,46 @@ Figure~\ref{fig:framework} gives the overview: the nine tasks grouped by head si
 \subsection{LoRA for 3D Convolutions}
 \label{sec:lora}
 
-Low-Rank Adaptation (LoRA)~\cite{hu2022lora} injects trainable low-rank matrices into a frozen weight matrix $W \in \mathbb{R}^{d \times k}$:
+\fullonly{Low-Rank Adaptation (LoRA)~\cite{hu2022lora} injects trainable low-rank matrices into a frozen weight matrix $W \in \mathbb{R}^{d \times k}$:
 \begin{equation}
 W' = W + \Delta W, \quad \Delta W = \frac{\alpha}{r} B \cdot A, \quad A \in \mathbb{R}^{r \times k}, \; B \in \mathbb{R}^{d \times r}
 \label{eq:lora}
 \end{equation}
 with rank $r \ll \min(d,k)$ and scaling factor $\alpha$. Only $A$ and $B$ are trained; $W$ stays frozen. The scaling ratio $\alpha/r$ controls the magnitude of the low-rank perturbation relative to the pretrained weights.
 
-For 3D convolutions in a U-Net, we apply LoRA via parallel $1\times1\times1$ convolutions acting on the channel dimension:
+For 3D convolutions}{Low-Rank Adaptation (LoRA)~\cite{hu2022lora} adds a trainable low-rank update $\frac{\alpha}{r}BA$ to a frozen weight $W$, with $A \in \mathbb{R}^{r \times k}$, $B \in \mathbb{R}^{d \times r}$ and $r \ll \min(d,k)$. For 3D convolutions} in a U-Net, we apply LoRA via parallel $1\times1\times1$ convolutions acting on the channel dimension:
 \begin{equation}
 \text{Conv3d}'(x) = \text{Conv3d}(x; W) + \frac{\alpha}{r} \, \text{Conv1}(x; B) \circ \text{Conv1}(x; A)
 \label{eq:lora3d}
 \end{equation}
 where Conv1 denotes $1\times1\times1$ convolution, $A \in \mathbb{R}^{r \times C_{\text{in}}}$ projects to rank-$r$ space, and $B \in \mathbb{R}^{C_{\text{out}} \times r}$ projects back. This formulation is memory-efficient and compatible with standard Conv3d layers~\cite{peft}.
 
-We use $\alpha=16$, evaluate $r \in \{4, 8, 16\}$ (Sec.~\ref{sec:res_rank}) and report $r=16$, and target every Conv3d in both encoder and decoder for segmentation; encoder-only suffices for regression. For a single Conv3d layer with input channels $C_{\text{in}}$ and output channels $C_{\text{out}}$, the number of LoRA parameters is:
+We use $\alpha=16$, evaluate $r \in \{4, 8, 16\}$ (Sec.~\ref{sec:res_rank}) and report $r=16$, and target every Conv3d in both encoder and decoder for segmentation; encoder-only suffices for regression. \fullonly{For a single Conv3d layer with input channels $C_{\text{in}}$ and output channels $C_{\text{out}}$, the number of LoRA parameters is:
 \begin{equation}
 |\phi_{\text{layer}}| = r \cdot (C_{\text{in}} + C_{\text{out}})
 \label{eq:param_count}
 \end{equation}
-which is substantially smaller than the original $C_{\text{out}} \times C_{\text{in}} \times D \times H \times W$ parameters. Summed over all targeted layers at $r=16$, the adapter for segmentation has 93,810 parameters against a 22.58M-parameter U-Net (0.41\%), and the adapter for the global tasks has 55,328 parameters (55,841 with the regression head) against the 14.14M-parameter encoder-plus-head (0.39\%); at $r=8$ the counts are 46,872 and 28,177.
+which is substantially smaller than the original $C_{\text{out}} \times C_{\text{in}} \times D \times H \times W$ parameters. Summed}{A layer adds $r\,(C_{\text{in}} + C_{\text{out}})$ parameters; summed} over all targeted layers at $r=16$, the adapter for segmentation has 93,810 parameters against a 22.58M-parameter U-Net (0.41\%), and the adapter for the global tasks has 55,328 parameters (55,841 with the regression head) against the 14.14M-parameter encoder-plus-head (0.39\%); at $r=8$ the counts are 46,872 and 28,177.
 
 \subsection{Task Isolation by Freezing}
 \label{sec:continual}
 
-Under every frozen-backbone strategy each task $k$ receives its own trainable set $\phi_k$ (a LoRA adapter\iffull{} in Algorithm~\ref{alg:continual}\fi; a bottleneck adapter, bias terms or only the head in the other strategies). The trainable parameter set for task $k$ is strictly disjoint from all other tasks:
+Under every frozen-backbone strategy each task $k$ receives its own trainable set $\phi_k$ (a LoRA adapter\iffull{} in Algorithm~\ref{alg:continual}\fi; a bottleneck adapter, bias terms or only the head in the other strategies). The trainable parameter set $\Phi_k = \{\phi_k, h_k\}$ of task $k$ is disjoint from every other task's\fullonly{:
 \begin{equation}
-\Phi_k = \{\phi_k, h_k\}, \quad \Phi_i \cap \Phi_j = \emptyset \;\; \forall \, i \neq j
+\Phi_i \cap \Phi_j = \emptyset \;\; \forall \, i \neq j
 \label{eq:disjoint}
 \end{equation}
-Because $\theta$ and $\{\Phi_{<k}\}$ are frozen when optimising $\Phi_k$, the performance of any prior task $j < k$ is invariant to training on $\mathcal{T}_k$. Formally, let $R_{t,j}$ denote the performance of task $j$ after training up to task $t$. Then:
+Because}{. Because} $\theta$ and $\{\Phi_{<k}\}$ are frozen when optimising $\Phi_k$, the performance of any prior task $j < k$ is invariant to training on $\mathcal{T}_k$. Formally, let $R_{t,j}$ denote the performance of task $j$ after training up to task $t$. Then:
 \begin{equation}
 R_{t,j} = R_{j,j} \quad \forall \, t \geq j \implies \text{BWT}_j = R_{K,j} - R_{j,j} = 0
 \label{eq:bwt_zero}
 \end{equation}
-This zero-forgetting property holds \emph{by construction}, without regularisation or replay. It is not, however, unique to adapters: any scheme that leaves shared weights untouched, including head tuning on a frozen encoder, satisfies Eq.~\eqref{eq:bwt_zero} equally. What distinguishes the schemes is how many parameters they must train to reach a given accuracy, which is what Sec.~\ref{sec:results} measures. The total model storage after $K$ tasks is:
+This zero-forgetting property holds \emph{by construction}, without regularisation or replay. It is not, however, unique to adapters: any scheme that leaves shared weights untouched, including head tuning on a frozen encoder, satisfies Eq.~\eqref{eq:bwt_zero} equally. What distinguishes the schemes is how many parameters they must train to reach a given accuracy, which is what Sec.~\ref{sec:results} measures. \fullonly{The total model storage after $K$ tasks is:
 \begin{equation}
 \text{Storage} = |\theta| + \sum_{k=1}^{K} (|\phi_k| + |h_k|)
 \label{eq:storage}
 \end{equation}
-which grows linearly in $K$ with a small per-task overhead since $|\phi_k| \ll |\theta|$.
+which grows linearly in $K$ with a small per-task overhead since $|\phi_k| \ll |\theta|$.}{Storage after $K$ tasks is $|\theta| + \sum_k (|\phi_k| + |h_k|)$, linear in $K$ with a small per-task overhead.}
 
 \iffull  % Algorithm 1 is textbook material; arXiv version only
 \begin{algorithm}[t]
@@ -315,14 +315,16 @@ All results are on held-out test splits at $N_k=32$, reported as mean $\pm$ SD o
 \subsection{Nine Tasks, Eleven Strategies at a Glance}
 \label{sec:res_overview}\label{sec:main}\label{sec:res_replicate}
 
-Table~\ref{tab:all} and Fig.~\ref{fig:rule} give every strategy on every task at the shared learning rate; the paired contrasts behind the text are in Tables~\ref{tab:paired} and~\ref{tab:paired_global}, and the three questions that organise the rest of this section are answered from them. The tasks were chosen to share as little as possible within each family (a different pathology, site and scanner; a second cohort for both global tasks; a clinical label), so a pattern that holds across them is a property of the strategy rather than of one dataset.
+Table~\ref{tab:all}\fullonly{ and Fig.~\ref{fig:rule} give}{ gives} every strategy on every task at the shared learning rate; the paired contrasts behind the text are in Table~\ref{tab:paired}\fullonly{ and Table~\ref{tab:paired_global}}{ (segmentation; the global-task contrasts are quoted in the text and given in full in the released statistics)}, and the three questions that organise the rest of this section are answered from them. The tasks were chosen to share as little as possible within each family (a different pathology, site and scanner; a second cohort for both global tasks; a clinical label), so a pattern that holds across them is a property of the strategy rather than of one dataset.
 
+\iffull  % full version only; Table tab:all carries the same numbers
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig_head_size_rule.pdf}
 \caption{Four strategies on all nine tasks at $N_k=32$, mean $\pm$ SD over five seeds, at the shared learning rate. Left: segmentation tasks (Dice), where the frozen-encoder decoder is level with LoRA or ahead. Middle and right: global tasks (MAE in years; AUC), where the gradient-trained linear probe and BitFit return constant outputs; the closed-form probe of Table~\ref{tab:controls} does not. Dashed line: chance.}
 \label{fig:rule}
 \end{figure*}
+\fi  % \iffull (\label{fig:rule})
 
 \begin{table*}[t]
 \caption{All nine tasks, $N_k=32$, mean $\pm$ SD over seeds 42--46; LoRA rank $r{=}16$. Segmentation reports Dice$\uparrow$; brain age MAE in years$\downarrow$; classification AUC$\uparrow$. Superscript c marks a method whose output does not vary with the input (prediction SD $<0.5$\,yr for brain age; balanced accuracy within 0.02 of 0.500 for classification) on every seed; c\,$k$/5 marks $k$ of the five seeds. RI = LoRA + head on a randomly initialised backbone (Sec.~\ref{sec:res_pretrain}). All ISLES entries are single-task runs. Adapter = Houlsby-style bottleneck adapters at LoRA's budget (Sec.~\ref{sec:baselines}). Trainable counts for the global tasks are for classification and include its 1,026-parameter head. Bold: best of the five strategies.}
@@ -361,6 +363,7 @@ Contrast & $\Delta$Dice & 95\% CI & per-seed range & $p$ & $p_{\text{Holm}}$ & s
 \end{tabular}
 \end{table*}
 
+\iffull  % full version only
 \begin{table}[t]
 \caption{Paired contrasts on the global tasks, seed as the unit (five seeds; columns as in Table~\ref{tab:paired}). Brain age: within-seed mean difference in absolute error in years (negative favours the first method; ``constant'' predicts the mean training age). Sex and CDR: difference of per-seed AUCs (positive favours the first method). $p_{\text{Holm}}$ is adjusted within each block.}
 \label{tab:paired_global}
@@ -380,6 +383,7 @@ Contrast & $\Delta$ & 95\% CI & range & $p$ & $p_{\text{Holm}}$ & seeds \\
 \bottomrule
 \end{tabular}}
 \end{table}
+\fi  % \iffull (\label{tab:paired_global})
 
 \subsection{Q1: Is the Head Fitted?}
 \label{sec:res_q1}
@@ -428,7 +432,7 @@ Task & $\Delta$Dice & 90\% CI & TOST $p$ & verdict & HT deficit $\le$ \\
 \subsubsection{A small head: gradient descent against a closed-form fit}
 \label{sec:res_age}\label{sec:res_controls}
 
-Brain age is a global property of the head, and from $64^3$ patches no method learns it: all ten configurations\iffull{} in Table~\ref{tab:main}\fi{} land at 14.3--14.7\,yr, the level of a constant predictor, including full fine-tuning (Sec.~\ref{sec:res_forgetting} uses that sequence for forgetting). The global tasks below therefore take the whole head resampled to a single $96^3$ cube \iffull(Table~\ref{tab:age})\else(Table~\ref{tab:all})\fi. There LoRA + head reaches MAE $10.99\pm1.27$\,yr with $R^2=0.31$, beating the constant predictor by 3.68\,yr per subject on every seed ($p=0.002$) and full fine-tuning at the shared learning rate by 1.68\,yr ($p=0.01$, $p_{\text{Holm}}=0.06$; Table~\ref{tab:paired_global}). The gradient-trained linear head and BitFit do \emph{not} recover: their predictions still have a standard deviation of about 0.1\,yr against a true 16.5, i.e.\ they remain constant.
+Brain age is a global property of the head, and from $64^3$ patches no method learns it: all ten configurations\iffull{} in Table~\ref{tab:main}\fi{} land at 14.3--14.7\,yr, the level of a constant predictor, including full fine-tuning (Sec.~\ref{sec:res_forgetting} uses that sequence for forgetting). The global tasks below therefore take the whole head resampled to a single $96^3$ cube \iffull(Table~\ref{tab:age})\else(Table~\ref{tab:all})\fi. There LoRA + head reaches MAE $10.99\pm1.27$\,yr with $R^2=0.31$, beating the constant predictor by 3.68\,yr per subject on every seed ($p=0.002$) and full fine-tuning at the shared learning rate by 1.68\,yr ($p=0.01$, $p_{\text{Holm}}=0.06$\fullonly{; Table~\ref{tab:paired_global}}{}). The gradient-trained linear head and BitFit do \emph{not} recover: their predictions still have a standard deviation of about 0.1\,yr against a true 16.5, i.e.\ they remain constant.
 
 \fullonly{Figure~\ref{fig:age_scatter} shows what the numbers summarise: the linear probe's predictions sit in a 47--54\,yr band whatever the true age, while LoRA's follow it, on both cohorts.}{The gradient probe's predictions sit in a 47--54\,yr band whatever the true age, while LoRA's follow it, on both cohorts.}
 
@@ -505,7 +509,7 @@ Contrast & $\Delta$ & 95\% CI & per-seed range & $p$ & $p_{\text{Holm}}$ & seeds
 
 With the head fitted, what does perturbing or releasing the encoder add? On the global tasks the answer is the OASIS numbers above: 3.5\,yr and 0.08 AUC on the cohort whose scanner, channel count and age range all differ from IXI, and nothing measurable on IXI. Partial fine-tuning, which releases the deepest encoder stage together with everything downstream, lands between the closed-form probe and LoRA on brain age and OASIS sex, slightly above both on IXI sex ($+0.029$ AUC, $p=0.25$), and level with LoRA on BraTS; none of these differences is significant, so the gain belongs to moving the encoder rather than to LoRA's form.
 
-\textbf{A second adapter family.} Houlsby-style bottleneck adapters, the other standard way of moving a frozen encoder, behave like LoRA on the global tasks (Adapter column of Table~\ref{tab:all}; paired contrasts in Tables~\ref{tab:paired} and~\ref{tab:paired_global}): IXI brain age $11.48\pm2.15$\,yr ($p=0.42$ against LoRA), OASIS brain age $9.68\pm1.08$\,yr, 2.3\,yr better than LoRA on four of five seeds ($p=0.04$, $p_{\text{Holm}}=0.20$), and sex AUC $0.903$ and $0.915$ ($p_{\text{Holm}}=0.30$ and $0.78$). On segmentation the two are level on hippocampus and WMH and the adapters trail on the two small-lesion tasks, by $0.017$ Dice on BraTS ($p=0.42$) and $0.104$ on stroke lesions ($p=0.03$, $p_{\text{Holm}}=0.49$); with five seeds only the direction, consistent on every seed for ISLES, can be claimed. \fullonly{We note, without testing it, that a serial bottleneck rewrites every feature map it is inserted into whereas a parallel low-rank branch adds to it, which could matter where the signal is a few voxels wide.}{}
+\textbf{A second adapter family.} Houlsby-style bottleneck adapters, the other standard way of moving a frozen encoder, behave like LoRA on the global tasks (Adapter column of Table~\ref{tab:all}; paired contrasts in Table~\ref{tab:paired}\fullonly{ and Table~\ref{tab:paired_global}}{}): IXI brain age $11.48\pm2.15$\,yr ($p=0.42$ against LoRA), OASIS brain age $9.68\pm1.08$\,yr, 2.3\,yr better than LoRA on four of five seeds ($p=0.04$, $p_{\text{Holm}}=0.20$), and sex AUC $0.903$ and $0.915$ ($p_{\text{Holm}}=0.30$ and $0.78$). On segmentation the two are level on hippocampus and WMH and the adapters trail on the two small-lesion tasks, by $0.017$ Dice on BraTS ($p=0.42$) and $0.104$ on stroke lesions ($p=0.03$, $p_{\text{Holm}}=0.49$); with five seeds only the direction, consistent on every seed for ISLES, can be claimed. \fullonly{We note, without testing it, that a serial bottleneck rewrites every feature map it is inserted into whereas a parallel low-rank branch adds to it, which could matter where the signal is a few voxels wide.}{}
 
 \textbf{A learning rate per strategy.} The shared rate of $10^{-3}$ was chosen for LoRA. \fullonly{Table~\ref{tab:lr} re-runs}{We re-ran} the five main strategies at $10^{-4}$, $3{\times}10^{-4}$ and $10^{-3}$ on BraTS, IXI brain age and IXI sex (seeds 42--44) and \fullonly{picks}{picked}, per strategy and task, the rate with the best validation metric. BitFit and the adapters keep $10^{-3}$ on every task, and LoRA keeps it on BraTS and IXI brain age and drops to $3{\times}10^{-4}$ on IXI sex, where the change costs 0.013 AUC on the test set. Full fine-tuning prefers $10^{-4}$ on BraTS and IXI sex and improves substantially: Dice $0.798\to0.835$, now $0.06$ above LoRA, and AUC $0.822\to0.911$, now $0.03$ above it; on IXI brain age it chooses $3{\times}10^{-4}$ and stays 1.9\,yr behind LoRA. The shared-rate comparison therefore understates full fine-tuning on two of three tasks. The ordering among the frozen-backbone strategies is unchanged by the sweep, and LoRA's rate sits at the top of the grid on two tasks, so a wider grid could move it too.
 
@@ -533,8 +537,9 @@ Task & shared & chosen & shared & chosen & shared & chosen & shared & chosen & s
 \subsubsection{How far below full data}
 \label{sec:res_full}
 
-Table~\ref{tab:full} trains the same strategies on every labelled subject available outside the seed-42 validation and test sets, on the four tasks that have any. With 908 BraTS volumes LoRA + head reaches Dice $0.859$, head tuning $0.849$ and full fine-tuning $0.865$, against $0.772$, $0.782$ and $0.787$ at 32 shots; with 249 IXI subjects LoRA's brain-age MAE falls from $10.99$ to $8.33$\,yr ($R^2$ 0.31 to 0.55) and its sex AUC from $0.878$ to $0.994$; with 106 OASIS subjects from $11.95$ to $8.27$\,yr ($R^2$ 0.60 to 0.79) and $0.920$ to $0.971$. \fullonly{Two things follow. The 32-shot results are not near saturation: they sit $0.09$ Dice and 2.7--3.7\,yr below what the same recipe reaches with all the data, which is the regime the paper is about. And the spread between strategies stays small: on BraTS the probe is now $0.010$ Dice below LoRA and full fine-tuning $0.006$ above it, so 93.8K low-rank parameters stay within $0.006$ Dice of training all 22.6M even at 908 volumes; on all four global tasks LoRA still matches or beats full fine-tuning ($8.33$ vs $8.50$\,yr, $8.27$ vs $9.45$, AUC $0.994$ vs $0.958$ and $0.971$ vs $0.953$).}{The 32-shot results are therefore not near saturation (they sit $0.09$ Dice and 2.7--3.7\,yr below the full-data figures), and the spread between strategies stays small at full data: on BraTS the three are within $0.016$ Dice, and on the global tasks LoRA still matches or beats full fine-tuning at the shared rate.} The closed-form probe (Sec.~\ref{sec:res_controls}) fitted on the same 249 IXI subjects reaches 9.14\,yr and AUC 0.978, against 14.61 and 0.88 for the gradient-trained head on the same frozen features, and 13.2\,yr and 0.923 on the 106 OASIS subjects. These are single runs and are reported as reference points, not as a comparison.
+\fullonly{Table~\ref{tab:full} trains}{We trained} the same strategies on every labelled subject available outside the seed-42 validation and test sets, on the four tasks that have any. With 908 BraTS volumes LoRA + head reaches Dice $0.859$, head tuning $0.849$ and full fine-tuning $0.865$, against $0.772$, $0.782$ and $0.787$ at 32 shots; with 249 IXI subjects LoRA's brain-age MAE falls from $10.99$ to $8.33$\,yr ($R^2$ 0.31 to 0.55) and its sex AUC from $0.878$ to $0.994$; with 106 OASIS subjects from $11.95$ to $8.27$\,yr ($R^2$ 0.60 to 0.79) and $0.920$ to $0.971$. \fullonly{Two things follow. The 32-shot results are not near saturation: they sit $0.09$ Dice and 2.7--3.7\,yr below what the same recipe reaches with all the data, which is the regime the paper is about. And the spread between strategies stays small: on BraTS the probe is now $0.010$ Dice below LoRA and full fine-tuning $0.006$ above it, so 93.8K low-rank parameters stay within $0.006$ Dice of training all 22.6M even at 908 volumes; on all four global tasks LoRA still matches or beats full fine-tuning ($8.33$ vs $8.50$\,yr, $8.27$ vs $9.45$, AUC $0.994$ vs $0.958$ and $0.971$ vs $0.953$).}{The 32-shot results are therefore not near saturation (they sit $0.09$ Dice and 2.7--3.7\,yr below the full-data figures), and the spread between strategies stays small at full data: on BraTS the three are within $0.016$ Dice, and on the global tasks LoRA still matches or beats full fine-tuning at the shared rate.} The closed-form probe (Sec.~\ref{sec:res_controls}) fitted on the same 249 IXI subjects reaches 9.14\,yr and AUC 0.978, against 14.61 and 0.88 for the gradient-trained head on the same frozen features, and 13.2\,yr and 0.923 on the 106 OASIS subjects. These are single runs and are reported as reference points, not as a comparison.
 
+\iffull  % full version only; numbers quoted in the text
 \begin{table*}[t]
 \caption{Full-data reference, seed 42: the 32-shot result (seed 42) beside the same strategy trained on every labelled subject outside that seed's validation and test sets ($N_{\text{full}}$; one run). BraTS runs 10 epochs over 908 volumes; the global tasks keep the 100-epoch recipe. ISLES, hippocampus, WMH and CDR have no subjects outside the few-shot protocol's splits.}
 \label{tab:full}
@@ -551,6 +556,7 @@ Task & Metric & $N_{\text{full}}$ & 32 shots & full & 32 shots & full & 32 shots
 \bottomrule
 \end{tabular}
 \end{table*}
+\fi  % \iffull (\label{tab:full})
 
 
 \subsection{Q3: What It Costs}
@@ -687,7 +693,7 @@ BitFit & 6.4\,K & 25\,KB & 87\,MB & 48.1\,min \\
 \subsubsection{A second backbone}
 \label{sec:res_swin}
 
-Everything above is measured on one convolutional backbone. Table~\ref{tab:swin} repeats the four strategies that define the decision rule on a Swin UNETR with a self-supervised transformer encoder~\cite{hatamizadeh2022swin,tang2022selfsupervised}, on one large-head task and two small-head tasks, with the recipe unchanged and the same three seeds on both backbones.
+Everything above is measured on one convolutional backbone. \fullonly{Table~\ref{tab:swin} repeats}{We repeated} the four strategies that define the decision rule on a Swin UNETR with a self-supervised transformer encoder~\cite{hatamizadeh2022swin,tang2022selfsupervised}, on one large-head task and two small-head tasks, with the recipe unchanged and the same three seeds on both backbones.
 
 The large-head half transfers intact. On BraTS the Swin probe is within $0.004$ Dice of Swin LoRA ($0.816$ vs $0.820$; $p=0.71$ over three seeds), full fine-tuning leads by $0.031$ on every seed ($p=0.02$, $p_{\text{Holm}}=0.13$) and BitFit collapses ($0.421$; $p_{\text{Holm}}=0.02$): the U-Net ordering at a higher absolute level. The parameter ratio is also the same, a 54.1M-parameter decoder against 618K low-rank parameters, 88$\times$.
 
@@ -695,6 +701,7 @@ The small-head half transfers for classification and not for regression. On IXI 
 
 \fullonly{What the replication establishes is the segmentation half: on either backbone, training the inherited decoder is as accurate as LoRA. On the global tasks it mainly shows how recipe-dependent the small-head results are, which Sec.~\ref{sec:res_controls} then explains; the closed-form probe was not run on the Swin features.}{The replication establishes the segmentation half on a second backbone; on the global tasks it mainly shows how recipe-dependent the small-head results are (Sec.~\ref{sec:res_controls}).}
 
+\iffull  % full version only; numbers quoted in the text
 \begin{table*}[t]
 \caption{Second backbone: the four strategies that define the decision rule on the FOMO 3D U-Net and on a Swin UNETR with a self-supervised transformer encoder, $N_k=32$, mean $\pm$ SD over seeds 42--44 on both backbones (so the U-Net columns differ slightly from Table~\ref{tab:all}). Superscript c as in Table~\ref{tab:all}. Trainable parameters, U-Net / Swin, segmentation and whole head (whole-head counts are for brain age and include the pooled head): LoRA 93.8K / 618K and 55.8K / 485K; Head tuning 8.4M / 54.1M and 0.5K / 0.8K; Full FT 22.6M / 62.2M and 14.1M / 8.1M; BitFit 6.4K / 21.7K and 4.5K / 22.4K. Bold: best per column.}
 \label{tab:swin}
@@ -711,6 +718,7 @@ Strategy & U-Net & Swin UNETR & U-Net & Swin UNETR & U-Net & Swin UNETR \\
 \bottomrule
 \end{tabular}
 \end{table*}
+\fi  % \iffull (\label{tab:swin})
 
 \iffull  % full version only
 \begin{table}[t]
@@ -736,7 +744,7 @@ Contrast & $\Delta$ & 95\% CI & range & $p$ & $p_{\text{Holm}}$ & seeds \\
 
 \fullonly{Whether the checkpoint loads and whether it helps are separate questions. On the first, the FOMO checkpoint supplies 59 of the 82 tensors of the segmentation model. Seven have the wrong shape and are left at random initialisation (the input convolution, whose channel count depends on the task; the first convolution of each of the four decoder stages; and the output projection), and the second convolution of each decoder stage is absent from the checkpoint altogether. The encoder proper loads 39 of its 40 tensors. ``Pretrained'' in this paper therefore means a pretrained encoder beneath a largely re-initialised decoder, which is also what the FOMO baseline code does.}{Whether the checkpoint loads and whether it helps are separate questions. On the first, it supplies 59 of the segmentation model's 82 tensors (Sec.~\ref{sec:backbone}): seven are re-initialised for shape and eight are absent, all in the decoder, so ``pretrained'' here means a pretrained encoder beneath a largely re-initialised decoder, as in the FOMO baseline code.}
 
-On the second, we repeated the LoRA + head ($r{=}16$) configuration on every task with the backbone randomly initialised instead of loaded, changing nothing else (\fullonly{Fig.~\ref{fig:pretrain}; }{}RI column of Table~\ref{tab:all}; paired contrasts in Tables~\ref{tab:paired} and~\ref{tab:paired_global}). On glioma segmentation the two are identical ($+0.000$ Dice, $p=0.99$), as on IXI brain age ($-0.00$\,yr, $p=1.00$), ISLES ($-0.030$, $p=0.35$) and hippocampus ($+0.002$, $p=0.06$). The checkpoint helps on WMH ($+0.024$ Dice on four of five seeds, $p=0.27$), OASIS brain age ($1.2$\,yr, $p=0.12$) and both sex tasks ($+0.03$ and $+0.04$ AUC, $p=0.20$ and $0.16$): consistent in direction, none significant over five seeds. The same holds when the probe or full fine-tuning is initialised either way on BraTS ($+0.018$ and $+0.002$ Dice\fullonly{, Table~\ref{tab:paired_pretrain}}{}).
+On the second, we repeated the LoRA + head ($r{=}16$) configuration on every task with the backbone randomly initialised instead of loaded, changing nothing else (\fullonly{Fig.~\ref{fig:pretrain}; }{}RI column of Table~\ref{tab:all}; paired contrasts in Table~\ref{tab:paired}\fullonly{ and Table~\ref{tab:paired_global}}{}). On glioma segmentation the two are identical ($+0.000$ Dice, $p=0.99$), as on IXI brain age ($-0.00$\,yr, $p=1.00$), ISLES ($-0.030$, $p=0.35$) and hippocampus ($+0.002$, $p=0.06$). The checkpoint helps on WMH ($+0.024$ Dice on four of five seeds, $p=0.27$), OASIS brain age ($1.2$\,yr, $p=0.12$) and both sex tasks ($+0.03$ and $+0.04$ AUC, $p=0.20$ and $0.16$): consistent in direction, none significant over five seeds. The same holds when the probe or full fine-tuning is initialised either way on BraTS ($+0.018$ and $+0.002$ Dice\fullonly{, Table~\ref{tab:paired_pretrain}}{}).
 
 \fullonly{The closed-form probe gives a cleaner answer about the encoder's features, because it has no optimiser to confound them. Fitted on frozen pretrained features it beats the same fit on frozen random features on every global task and every seed: by 1.5\,yr on IXI brain age, 3.0\,yr on OASIS brain age, and $0.21$ and $0.08$ AUC on IXI and OASIS sex (all $p_{\text{Holm}}\le0.03$). The pretrained encoder does carry signal that random features lack; once LoRA is allowed to move the encoder, that head start is mostly recovered from random initialisation within 100 epochs.
 
