@@ -332,6 +332,18 @@ def main():
         aft = vals("n32", c, 2, "dice", "test_after_task5")
         bwt = aft - dice[: aft.size] if aft.size else aft
         L.append(f"{lab:32s} & {ms(dice)} & {ms(age, 2)} & {ms(aft)} & {ms(bwt)} \\\\")
+    # the same sequence at full fine-tuning's own per-task rates (BraTS 1e-4, brain age 3e-4);
+    # BraTS is retrained at that rate, so the "at learn" column differs from the block above
+    own = []
+    for lab, c in (("Full FT, own rates", "sequential_ft_t25_ownlr"), ("EWC, $\\lambda{=}10^2$, own rates", "ewc_t25_ownlr_ewc100")):
+        dice, age = vals("n32", c, 2, "dice"), vals("n32", c, 5, "mae")
+        aft = vals("n32", c, 2, "dice", "test_after_task5")
+        if dice.size == 0:
+            continue
+        bwt = aft - dice[: aft.size] if aft.size else aft
+        own.append(f"{lab:32s} & {ms(dice)} & {ms(age, 2)} & {ms(aft)} & {ms(bwt)} \\\\")
+    if own:
+        L += ["\\midrule"] + own
     (TAB / "forget25_body.tex").write_text("\n".join(L) + "\n")
 
     n_runs = len(glob.glob(str(OUT / "n*" / "*" / "seed*" / "results.json")))
