@@ -85,3 +85,11 @@ release_assets/
 data/nnunet_raw/
 data/nnunet_preprocessed/
 outputs/nnunet_results/
+
+# JBHI / arXiv submission packages (regenerated from main.tex; see IEEE_JBHI_3dBrainLoRA)
+IEEE_JBHI_3dBrainLoRA/FewShot3DBrain_JBHI_*
+IEEE_JBHI_3dBrainLoRA/FewShot3DBrain_arxiv.tar.gz
+IEEE_JBHI_3dBrainLoRA/jbhi-consent_form*.pdf
+# image-model teaser drafts (final one is tracked as figures/teaser_gen_v4.png)
+IEEE_JBHI_3dBrainLoRA/新任務*.png
+IEEE_JBHI_3dBrainLoRA/適應策略*.png
