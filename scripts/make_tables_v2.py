@@ -290,37 +290,68 @@ def main():
             L.append("\\midrule")
     (TAB / "controls_body.tex").write_text("\n".join(L) + "\n")
 
-    # ---- tab:lr: per-strategy learning rate, chosen on validation ------------------
+    # ---- tab:lr: per-strategy learning rate, chosen on validation, all nine tasks ---
     # Seeds 42-44 for every rate. The rate is chosen per strategy and task by the mean
     # validation metric of the kept epoch; the test metric at that rate is reported beside
     # the test metric at the shared rate 1e-3.
     LR = (("1e-4", "_lr1e-4"), ("3e-4", "_lr3e-4"), ("1e-3", ""))
     S3 = (42, 43, 44)
-    def lr_cfg(c, task, suf):
+    SHARED_T2 = ("lora_head_r16", "sequential_linear", "sequential_ft", "bitfit", "adapter")
+
+    def lr_cfg(base, task, suf):
         if suf == "":
-            return {2: {"lora_head_r16_t2": "lora_head_r16", "sequential_linear_t2": "sequential_linear",
-                        "sequential_ft_t2": "sequential_ft", "bitfit_t2": "bitfit", "adapter_t2": "adapter"}.get(c, c)}.get(task, c)
-        return c + suf
+            return base if (task == 2 and base in SHARED_T2) else f"{base}_t{task}"
+        return f"{base}_t{task}{suf}"
+
+    def own_rate(base, task, metric, lower):
+        """(config, rate) with the best mean validation metric over seeds 42-44, or (None, None)."""
+        vmean = {}
+        for lr, suf in LR:
+            v = vals("n32", lr_cfg(base, task, suf), task, metric, stage="val_selected", seeds=S3)
+            if v.size == len(S3):
+                vmean[lr] = v.mean()
+        if not vmean:
+            return None, None
+        pick = (min if lower else max)(vmean, key=vmean.get)
+        return lr_cfg(base, task, dict(LR)[pick]), pick
+
+    LR_TASKS = (("T1 BraTS (Dice)", 2, "dice", 3, False), ("T3 ISLES (Dice)", 4, "dice", 3, False),
+                ("T4 hippocampus (Dice)", 7, "dice", 3, False), ("T6 WMH (Dice)", 8, "dice", 3, False),
+                ("T2 IXI age (MAE)", 5, "mae", 2, True), ("T7 OASIS age (MAE)", 9, "mae", 2, True),
+                ("T5 IXI sex (AUC)", 6, "auc", 3, False), ("T8 OASIS sex (AUC)", 10, "auc", 3, False),
+                ("T9 OASIS CDR (AUC)", 11, "auc", 3, False))
     L = []
-    for name, task, metric, d, lower in (("BraTS Dice", 2, "dice", 3, False), ("IXI age MAE", 5, "mae", 2, True), ("IXI sex AUC", 6, "auc", 3, False)):
+    for name, task, metric, d, lower in LR_TASKS:
         cells = []
-        for lab, base in (("L", "lora_head_r16"), ("SL", "sequential_linear"), ("FT", "sequential_ft"), ("BF", "bitfit"), ("AD", "adapter")):
-            c0 = f"{base}_t{task}"
-            vmean = {}
-            for lr, suf in LR:
-                v = vals("n32", lr_cfg(c0, task, suf), task, metric, stage="val_selected", seeds=S3)
-                if v.size == len(S3):
-                    vmean[lr] = v.mean()
-            if not vmean:
+        for base in SHARED_T2:
+            cfg, pick = own_rate(base, task, metric, lower)
+            if cfg is None:
                 cells += ["n/a", "n/a"]
                 continue
-            pick = (min if lower else max)(vmean, key=vmean.get)
-            t_pick = vals("n32", lr_cfg(c0, task, dict(LR)[pick]), task, metric, seeds=S3)
-            t_ref = vals("n32", lr_cfg(c0, task, ""), task, metric, seeds=S3)
+            t_ref = vals("n32", lr_cfg(base, task, ""), task, metric, seeds=S3)
+            t_pick = vals("n32", cfg, task, metric, seeds=S3)
             cells.append(f"{m(t_ref, d)}")
             cells.append(f"{m(t_pick, d)} ({pick})")
-        L.append(f"{name:12s} & " + " & ".join(cells) + " \\\\")
+        L.append(f"{name:22s} & " + " & ".join(cells) + " \\\\")
+        if task == 8:
+            L.append("\\midrule")
     (TAB / "lr_body.tex").write_text("\n".join(L) + "\n")
+
+    # ---- tab:scratch: nnU-Net v2 trained from scratch on the same 32 cases, seeds 42-44 ---
+    # Columns: nnU-Net, LoRA + head r16, head tuning, full FT at the shared rate, full FT at
+    # its own validation-chosen rate (tab:lr). Dice mean +- SD; HD95 mean (full version).
+    full, sl = [], []
+    for name, task in (("T1 BraTS", 2), ("T3 ISLES", 4), ("T4 hippocampus", 7), ("T6 WMH", 8)):
+        ft_own, rate = own_rate("sequential_ft", task, "dice", False)
+        cfgs = [f"nnunet_t{task}", lr_cfg("lora_head_r16", task, ""), lr_cfg("sequential_linear", task, ""),
+                lr_cfg("sequential_ft", task, ""), ft_own]
+        dice = [ms(vals("n32", c, task, "dice", seeds=S3)) for c in cfgs]
+        hd = [m(vals("n32", c, task, "hd95", seeds=S3), 1) for c in cfgs]
+        sl.append(f"{name:16s} & " + " & ".join(dice) + " \\\\")  # rates named in the JBHI caption
+        dice[-1] += f" ({rate})"
+        full.append(f"{name:16s} & " + " & ".join(dice) + " & " + " & ".join(hd) + " \\\\")
+    (TAB / "scratch_body.tex").write_text("\n".join(full) + "\n")
+    (TAB / "scratch_body_sl.tex").write_text("\n".join(sl) + "\n")
 
     # ---- tab:forget25: BraTS -> whole-head IXI brain age (a learnable second task) ---
     L = []
